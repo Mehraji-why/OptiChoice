@@ -72,7 +72,7 @@ Respond with ONLY valid JSON (no markdown, no preamble):
 }}
 """
     try:
-        response = client.models.generate_content(model="gemini-3.0-flash", contents=prompt)
+        response = client.models.generate_content(model="gemini-1.5-flash", contents=prompt)
         response_text = response.text.strip()
         if response_text.startswith("```"):
             response_text = response_text.split("```")[1]
@@ -155,7 +155,7 @@ Respond with ONLY valid JSON (no markdown):
 }}
 """
     try:
-        response = client.models.generate_content(model="gemini-3.0-flash", contents=prompt)
+        response = client.models.generate_content(model="gemini-1.5-flash", contents=prompt)
         response_text = response.text.strip()
         if response_text.startswith("```"):
             response_text = response_text.split("```")[1]
