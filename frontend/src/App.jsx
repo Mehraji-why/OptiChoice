@@ -24,7 +24,7 @@ return (
 <Navbar page={page} setPage={nav} lang={lang} setLang={setLang} text={text}/>
 {!apiHealthy && (
 <div className="fixed top-14 left-0 right-0 z-40 px-4 py-2 text-center" style={{ background:'rgba(120,80,0,0.85)' }}>
-<p className="text-xs text-yellow-300">⚠ Backend not responding — make sure FastAPI is running on port 8000.</p>
+<p className="text-xs text-yellow-300">⚠ Service warming up, please wait a moment...</p>
 </div>
 )}
 <div style={{ paddingTop:'56px' }}>
