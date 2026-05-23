@@ -9,28 +9,26 @@ import Navbar from './components/Navbar';
 import { t } from './i18n';
 import './styles/globals.css';
 import MVPBanner from './components/MVPBanner';
-export default function App() {
-const [page, setPage] = useState('home');
-const [results, setResults] = useState(null);
-const [lang, setLang] = useState('en');
-const text = t[lang] || t.en;
-const nav = (p) => { setPage(p); window.scrollTo(0,0); };
-return (
-<div style={{ background:'#0a0a0f' }}>
-<MVPBanner/>
-<Navbar page={page} setPage={nav} lang={lang} setLang={setLang} text={text}/>
 
-<div className="fixed top-14 left-0 right-0 z-40 px-4 py-2 text-center" style={{ background:'rgba(120,80,0,0.85)' }}>
-</div>
-)}
-<div style={{ paddingTop:'56px' }}>
-{page==='home' && <Home onNavigateToForm={()=>nav('form')} text={text}/>}
-{page==='form' && <DecisionForm onResultsReady={d=>{setResults(d);nav('results');}} onBackHome={()=>nav('home')}/>}
-{page==='results' && <Results results={results} onNewDecision={()=>nav('form')}/>}
-{page==='about' && <About text={text}/>}
-{page==='contact' && <Contact text={text}/>}
-{page==='how' && <HowItWorks/>}
-</div>
-</div>
-);
+export default function App() {
+  const [page, setPage] = useState('home');
+  const [results, setResults] = useState(null);
+  const [lang, setLang] = useState('en');
+  const text = t[lang] || t.en;
+  const nav = (p) => { setPage(p); window.scrollTo(0, 0); };
+
+  return (
+    <div style={{ background: '#0a0a0f' }}>
+      <MVPBanner />
+      <Navbar page={page} setPage={nav} lang={lang} setLang={setLang} text={text} />
+      <div style={{ paddingTop: '56px' }}>
+        {page === 'home' && <Home onNavigateToForm={() => nav('form')} text={text} />}
+        {page === 'form' && <DecisionForm onResultsReady={d => { setResults(d); nav('results'); }} onBackHome={() => nav('home')} />}
+        {page === 'results' && <Results results={results} onNewDecision={() => nav('form')} />}
+        {page === 'about' && <About text={text} />}
+        {page === 'contact' && <Contact text={text} />}
+        {page === 'how' && <HowItWorks />}
+      </div>
+    </div>
+  );
 }
