@@ -1,330 +1,275 @@
 import { useEffect, useRef, useState } from 'react';
+import { motion } from 'framer-motion';
 
-const PILLS = [
-  'Best laptop for coding under ₹70k',
-  'Phone with great camera & battery',
-  'Tablet for note-taking & drawing',
-];
+// Subtle scanline / grain texture via SVG data URI
+const NOISE_BG = `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='200' height='200'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.75' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='200' height='200' filter='url(%23n)' opacity='0.04'/%3E%3C/svg%3E")`;
 
-const STATS = [
-  { value: '10+', label: 'Factors Weighed' },
-  { value: '100%', label: 'Transparent' },
-  { value: '₹', label: 'Budget Smart' },
-];
+function ThinRuler() {
+  return (
+    <div style={{
+      display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '28px',
+    }}>
+      <div style={{ width: '40px', height: '1px', background: '#c8a96e', opacity: 0.7 }} />
+      <span style={{
+        fontSize: '10px', letterSpacing: '0.32em', textTransform: 'uppercase',
+        color: 'rgba(200,169,110,0.7)', fontFamily: "'DM Sans', sans-serif",
+      }}>
+        Optimization Engine
+      </span>
+    </div>
+  );
+}
 
 export default function Hero({ onTryNow, text }) {
   const canvasRef = useRef(null);
-  const [mounted, setMounted] = useState(false);
+  const [typed, setTyped] = useState(0);
+  const headline = text?.hero_title || 'The best choice\nfor your needs';
+  const lines = headline.split('\n');
 
+  // Subtle floating grid points — warm platinum, not neon
   useEffect(() => {
-    setMounted(true);
     const canvas = canvasRef.current;
     if (!canvas) return;
     const ctx = canvas.getContext('2d');
     let animId;
-    let w = (canvas.width = canvas.offsetWidth);
-    let h = (canvas.height = canvas.offsetHeight);
-
-    // Orbs
-    const orbs = Array.from({ length: 3 }, (_, i) => ({
-      x: [0.2, 0.8, 0.5][i] * w,
-      y: [0.3, 0.6, 0.15][i] * h,
-      r: [320, 260, 200][i],
-      dx: [(Math.random() - 0.5) * 0.18, (Math.random() - 0.5) * 0.14, (Math.random() - 0.5) * 0.22][i],
-      dy: [(Math.random() - 0.5) * 0.18, (Math.random() - 0.5) * 0.14, (Math.random() - 0.5) * 0.22][i],
-      color: ['rgba(245,197,24,', 'rgba(168,216,234,', 'rgba(245,197,24,'][i],
-      alpha: [0.055, 0.04, 0.03][i],
+    let w = canvas.width = canvas.offsetWidth;
+    let h = canvas.height = canvas.offsetHeight;
+    const pts = Array.from({ length: 38 }, () => ({
+      x: Math.random() * w, y: Math.random() * h,
+      r: Math.random() * 1.2 + 0.3,
+      dx: (Math.random() - 0.5) * 0.18,
+      dy: (Math.random() - 0.5) * 0.18,
+      a: Math.random() * 0.22 + 0.04,
     }));
-
-    // Stars
-    const stars = Array.from({ length: 80 }, () => ({
-      x: Math.random() * w,
-      y: Math.random() * h,
-      r: Math.random() * 1.1 + 0.2,
-      alpha: Math.random() * 0.35 + 0.05,
-      twinkle: Math.random() * Math.PI * 2,
-      speed: Math.random() * 0.015 + 0.005,
-    }));
-
-    function draw() {
+    const draw = () => {
       ctx.clearRect(0, 0, w, h);
-
-      // Orbs
-      orbs.forEach(o => {
-        o.x += o.dx; o.y += o.dy;
-        if (o.x < -o.r) o.x = w + o.r;
-        if (o.x > w + o.r) o.x = -o.r;
-        if (o.y < -o.r) o.y = h + o.r;
-        if (o.y > h + o.r) o.y = -o.r;
-        const g = ctx.createRadialGradient(o.x, o.y, 0, o.x, o.y, o.r);
-        g.addColorStop(0, o.color + o.alpha + ')');
-        g.addColorStop(1, o.color + '0)');
+      pts.forEach(p => {
+        p.x += p.dx; p.y += p.dy;
+        if (p.x < 0) p.x = w; if (p.x > w) p.x = 0;
+        if (p.y < 0) p.y = h; if (p.y > h) p.y = 0;
         ctx.beginPath();
-        ctx.arc(o.x, o.y, o.r, 0, Math.PI * 2);
-        ctx.fillStyle = g;
+        ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
+        ctx.fillStyle = `rgba(200,169,110,${p.a})`;
         ctx.fill();
       });
-
-      // Stars
-      stars.forEach(s => {
-        s.twinkle += s.speed;
-        const a = s.alpha * (0.6 + 0.4 * Math.sin(s.twinkle));
-        ctx.beginPath();
-        ctx.arc(s.x, s.y, s.r, 0, Math.PI * 2);
-        ctx.fillStyle = `rgba(255,255,255,${a})`;
-        ctx.fill();
-      });
-
       animId = requestAnimationFrame(draw);
-    }
-
-    draw();
-    const onResize = () => {
-      w = canvas.width = canvas.offsetWidth;
-      h = canvas.height = canvas.offsetHeight;
     };
+    draw();
+    const onResize = () => { w = canvas.width = canvas.offsetWidth; h = canvas.height = canvas.offsetHeight; };
     window.addEventListener('resize', onResize);
     return () => { cancelAnimationFrame(animId); window.removeEventListener('resize', onResize); };
   }, []);
 
-  const lines = (text?.hero_title || 'Make the\nRight Choice').split('\n');
+  // Stagger counter on mount
+  useEffect(() => {
+    const t = setTimeout(() => {
+      const interval = setInterval(() => {
+        setTyped(n => {
+          if (n >= 3) { clearInterval(interval); return n; }
+          return n + 1;
+        });
+      }, 280);
+      return () => clearInterval(interval);
+    }, 700);
+    return () => clearTimeout(t);
+  }, []);
+
+  const EXAMPLES = [
+    'Best laptop for coding under ₹70k',
+    'Phone with great camera & battery',
+    'Tablet for note-taking and drawing',
+  ];
+
+  const STATS = [
+    { v: '10+', l: 'Factors Analysed' },
+    { v: '100%', l: 'Transparent' },
+    { v: '₹', l: 'Budget-Aware' },
+  ];
 
   return (
-    <>
-      <style>{`
-        @import url('https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Sans:ital,wght@0,300;0,400;0,500;1,300&display=swap');
+    <section
+      style={{
+        position: 'relative',
+        minHeight: '92vh',
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'center',
+        justifyContent: 'center',
+        padding: '0 24px',
+        overflow: 'hidden',
+        background: '#0e0c0a',
+      }}
+    >
+      {/* Background layers */}
+      <div style={{
+        position: 'absolute', inset: 0,
+        backgroundImage: NOISE_BG,
+        backgroundRepeat: 'repeat',
+        pointerEvents: 'none',
+        opacity: 0.5,
+      }} />
+      {/* Structural grid — very faint */}
+      <div style={{
+        position: 'absolute', inset: 0, pointerEvents: 'none',
+        backgroundImage: 'linear-gradient(rgba(200,190,170,0.025) 1px, transparent 1px), linear-gradient(90deg, rgba(200,190,170,0.025) 1px, transparent 1px)',
+        backgroundSize: '80px 80px',
+      }} />
+      {/* Warm radial depth */}
+      <div style={{
+        position: 'absolute', top: '30%', left: '50%',
+        transform: 'translate(-50%,-50%)',
+        width: '700px', height: '500px',
+        background: 'radial-gradient(ellipse, rgba(200,169,110,0.055) 0%, transparent 68%)',
+        pointerEvents: 'none',
+      }} />
+      {/* Horizontal rule accent — top */}
+      <div style={{
+        position: 'absolute', top: 0, left: 0, right: 0,
+        height: '2px',
+        background: 'linear-gradient(90deg, transparent 0%, rgba(200,169,110,0.4) 50%, transparent 100%)',
+      }} />
 
-        .hero-root {
-          position: relative;
-          min-height: 100vh;
-          display: flex;
-          flex-direction: column;
-          align-items: center;
-          justify-content: center;
-          padding: 120px 24px 80px;
-          overflow: hidden;
-          background: #080810;
-        }
-        .hero-grid {
-          position: absolute;
-          inset: 0;
-          background-image:
-            linear-gradient(rgba(255,255,255,0.028) 1px, transparent 1px),
-            linear-gradient(90deg, rgba(255,255,255,0.028) 1px, transparent 1px);
-          background-size: 72px 72px;
-          pointer-events: none;
-        }
-        .hero-grid-fade {
-          position: absolute;
-          inset: 0;
-          background: radial-gradient(ellipse at 50% 50%, transparent 40%, #080810 85%);
-          pointer-events: none;
-        }
-        .hero-label {
-          font-family: 'DM Sans', sans-serif;
-          font-size: 11px;
-          letter-spacing: 0.32em;
-          text-transform: uppercase;
-          color: rgba(245,197,24,0.7);
-          margin-bottom: 24px;
-          display: flex;
-          align-items: center;
-          gap: 10px;
-          opacity: 0;
-          animation: fadeUp 0.7s 0.1s cubic-bezier(0.4,0,0.2,1) forwards;
-        }
-        .hero-label::before, .hero-label::after {
-          content: '';
-          width: 24px;
-          height: 1px;
-          background: rgba(245,197,24,0.4);
-        }
-        .hero-h1 {
-          font-family: 'Syne', sans-serif;
-          font-weight: 800;
-          line-height: 1.02;
-          letter-spacing: -0.035em;
-          color: #fff;
-          text-align: center;
-          margin-bottom: 24px;
-          opacity: 0;
-          animation: fadeUp 0.8s 0.2s cubic-bezier(0.4,0,0.2,1) forwards;
-          font-size: clamp(3rem, 8vw, 6.5rem);
-        }
-        .hero-h1 span {
-          background: linear-gradient(120deg, #f5c518 20%, #e8b020 80%);
-          -webkit-background-clip: text;
-          -webkit-text-fill-color: transparent;
-          background-clip: text;
-        }
-        .hero-sub {
-          font-family: 'DM Sans', sans-serif;
-          font-size: clamp(1rem, 1.8vw, 1.15rem);
-          font-weight: 300;
-          color: rgba(255,255,255,0.45);
-          max-width: 480px;
-          line-height: 1.75;
-          text-align: center;
-          margin-bottom: 40px;
-          opacity: 0;
-          animation: fadeUp 0.8s 0.35s cubic-bezier(0.4,0,0.2,1) forwards;
-        }
-        .hero-pills {
-          display: flex;
-          flex-wrap: wrap;
-          justify-content: center;
-          gap: 8px;
-          margin-bottom: 44px;
-          opacity: 0;
-          animation: fadeUp 0.8s 0.5s cubic-bezier(0.4,0,0.2,1) forwards;
-        }
-        .pill {
-          font-family: 'DM Sans', sans-serif;
-          font-size: 12px;
-          font-style: italic;
-          font-weight: 300;
-          padding: 8px 16px;
-          border-radius: 100px;
-          border: 1px solid rgba(255,255,255,0.08);
-          color: rgba(255,255,255,0.3);
-          background: rgba(255,255,255,0.02);
-          transition: all 0.25s ease;
-          cursor: pointer;
-        }
-        .pill:hover {
-          color: rgba(255,255,255,0.6);
-          border-color: rgba(245,197,24,0.2);
-          background: rgba(245,197,24,0.04);
-        }
-        .hero-cta {
-          display: inline-flex;
-          align-items: center;
-          gap: 12px;
-          padding: 16px 36px;
-          border-radius: 100px;
-          font-family: 'DM Sans', sans-serif;
-          font-size: 14px;
-          font-weight: 500;
-          letter-spacing: 0.04em;
-          color: #080810;
-          background: linear-gradient(135deg, #f5c518, #e8a820);
-          border: none;
-          cursor: pointer;
-          transition: all 0.3s cubic-bezier(0.4,0,0.2,1);
-          box-shadow: 0 0 0 0 rgba(245,197,24,0.3), 0 4px 24px rgba(245,197,24,0.2);
-          opacity: 0;
-          animation: fadeUp 0.8s 0.6s cubic-bezier(0.4,0,0.2,1) forwards;
-        }
-        .hero-cta:hover {
-          transform: translateY(-2px) scale(1.02);
-          box-shadow: 0 0 0 6px rgba(245,197,24,0.08), 0 8px 32px rgba(245,197,24,0.3);
-        }
-        .hero-cta:active { transform: translateY(0) scale(0.99); }
-        .hero-cta svg {
-          transition: transform 0.25s ease;
-        }
-        .hero-cta:hover svg { transform: translateX(3px); }
-        .hero-stats {
-          margin-top: 72px;
-          padding-top: 32px;
-          border-top: 1px solid rgba(255,255,255,0.05);
-          display: flex;
-          justify-content: center;
-          gap: 64px;
-          opacity: 0;
-          animation: fadeUp 0.8s 0.75s cubic-bezier(0.4,0,0.2,1) forwards;
-        }
-        .stat-val {
-          font-family: 'Syne', sans-serif;
-          font-size: 24px;
-          font-weight: 700;
-          color: #f5c518;
-          letter-spacing: -0.02em;
-        }
-        .stat-label {
-          font-family: 'DM Sans', sans-serif;
-          font-size: 10px;
-          letter-spacing: 0.18em;
-          text-transform: uppercase;
-          color: rgba(255,255,255,0.2);
-          margin-top: 4px;
-        }
-        @keyframes fadeUp {
-          from { opacity: 0; transform: translateY(20px); }
-          to   { opacity: 1; transform: translateY(0); }
-        }
-        .hero-badge {
-          display: inline-flex;
-          align-items: center;
-          gap: 6px;
-          padding: 5px 12px 5px 8px;
-          border-radius: 100px;
-          border: 1px solid rgba(245,197,24,0.2);
-          background: rgba(245,197,24,0.06);
-          font-family: 'DM Sans', sans-serif;
-          font-size: 11px;
-          color: rgba(245,197,24,0.75);
-          letter-spacing: 0.06em;
-          margin-bottom: 20px;
-          opacity: 0;
-          animation: fadeUp 0.6s 0s cubic-bezier(0.4,0,0.2,1) forwards;
-        }
-        .hero-badge-dot {
-          width: 6px; height: 6px;
-          border-radius: 50%;
-          background: #f5c518;
-          animation: pulse 2s ease-in-out infinite;
-        }
-        @keyframes pulse {
-          0%, 100% { opacity: 1; transform: scale(1); }
-          50% { opacity: 0.5; transform: scale(0.8); }
-        }
-      `}</style>
+      <canvas ref={canvasRef} style={{
+        position: 'absolute', inset: 0, width: '100%', height: '100%', pointerEvents: 'none',
+      }} />
 
-      <section className="hero-root">
-        <div className="hero-grid" />
-        <div className="hero-grid-fade" />
-        <canvas ref={canvasRef} style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', pointerEvents: 'none' }} />
+      {/* Content */}
+      <div style={{
+        position: 'relative', zIndex: 10,
+        maxWidth: '860px', width: '100%',
+        margin: '0 auto',
+      }}>
+        <motion.div
+          initial={{ opacity: 0, y: 18 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.8, ease: [0.22, 1, 0.36, 1] }}
+        >
+          <ThinRuler />
 
-        <div style={{ position: 'relative', zIndex: 10, maxWidth: '860px', margin: '0 auto', textAlign: 'center', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-
-          <div className="hero-badge">
-            <div className="hero-badge-dot" />
-            AI-Powered Optimization Engine
-          </div>
-
-          <p className="hero-label">{text?.tagline || 'Precision Decision Intelligence'}</p>
-
-          <h1 className="hero-h1">
+          {/* Main headline */}
+          <h1 style={{
+            fontFamily: "'Cormorant Garamond', Georgia, serif",
+            fontSize: 'clamp(3rem, 8vw, 6.4rem)',
+            fontWeight: 500,
+            lineHeight: 1.04,
+            letterSpacing: '-0.03em',
+            color: '#f0ece4',
+            marginBottom: '28px',
+          }}>
             {lines[0]}
-            {lines[1] && <><br /><span>{lines[1]}</span></>}
+            <br />
+            <span style={{ color: '#c8a96e', fontStyle: 'italic' }}>
+              {lines[1]}
+            </span>
           </h1>
 
-          <p className="hero-sub">{text?.hero_sub || 'Describe what you need in plain language. We analyze every factor and surface the best option — with full reasoning.'}</p>
+          {/* Subheadline */}
+          <p style={{
+            fontFamily: "'DM Sans', sans-serif",
+            fontSize: 'clamp(0.95rem, 2vw, 1.1rem)',
+            color: 'rgba(240,236,228,0.42)',
+            lineHeight: 1.72,
+            maxWidth: '480px',
+            marginBottom: '44px',
+            letterSpacing: '0.01em',
+          }}>
+            {text?.hero_sub}
+          </p>
 
-          <div className="hero-pills">
-            {PILLS.map(p => (
-              <span key={p} className="pill" onClick={onTryNow}>"{p}"</span>
+          {/* Example chips */}
+          <div style={{
+            display: 'flex', flexWrap: 'wrap', gap: '10px',
+            marginBottom: '48px',
+          }}>
+            {EXAMPLES.map((ex, i) => (
+              <motion.button
+                key={ex}
+                onClick={onTryNow}
+                initial={{ opacity: 0, y: 8 }}
+                animate={{ opacity: typed > i ? 1 : 0, y: typed > i ? 0 : 8 }}
+                transition={{ duration: 0.4, ease: [0.22, 1, 0.36, 1] }}
+                whileHover={{ borderColor: 'rgba(200,169,110,0.4)', color: 'rgba(240,236,228,0.6)' }}
+                style={{
+                  background: 'rgba(200,190,170,0.04)',
+                  border: '1px solid rgba(200,190,170,0.12)',
+                  borderRadius: '2px',
+                  padding: '8px 16px',
+                  fontSize: '12px',
+                  letterSpacing: '0.04em',
+                  color: 'rgba(240,236,228,0.32)',
+                  fontFamily: "'DM Sans', sans-serif",
+                  cursor: 'pointer',
+                  transition: 'all 0.2s ease',
+                }}
+              >
+                "{ex}"
+              </motion.button>
             ))}
           </div>
 
-          <button onClick={onTryNow} className="hero-cta">
+          {/* CTA */}
+          <motion.button
+            onClick={onTryNow}
+            whileHover={{ scale: 1.02, letterSpacing: '0.18em' }}
+            whileTap={{ scale: 0.98 }}
+            transition={{ duration: 0.2 }}
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '14px',
+              padding: '16px 40px',
+              background: '#c8a96e',
+              border: 'none',
+              borderRadius: '2px',
+              color: '#0e0c0a',
+              fontSize: '11.5px',
+              letterSpacing: '0.22em',
+              textTransform: 'uppercase',
+              fontFamily: "'DM Sans', sans-serif",
+              fontWeight: 600,
+              cursor: 'pointer',
+              transition: 'all 0.28s cubic-bezier(0.22,1,0.36,1)',
+              boxShadow: '0 8px 32px rgba(200,169,110,0.18)',
+            }}
+          >
             {text?.cta || 'Find My Best Option'}
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
               <path d="M5 12h14M12 5l7 7-7 7" />
             </svg>
-          </button>
+          </motion.button>
+        </motion.div>
 
-          <div className="hero-stats">
-            {STATS.map(s => (
-              <div key={s.label} style={{ textAlign: 'center' }}>
-                <div className="stat-val">{s.value}</div>
-                <div className="stat-label">{s.label}</div>
-              </div>
-            ))}
-          </div>
-        </div>
-      </section>
-    </>
+        {/* Stats row */}
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          transition={{ delay: 0.9, duration: 0.8 }}
+          style={{
+            marginTop: '80px',
+            paddingTop: '32px',
+            borderTop: '1px solid rgba(200,190,170,0.08)',
+            display: 'flex',
+            gap: '56px',
+          }}
+        >
+          {STATS.map(({ v, l }) => (
+            <div key={l}>
+              <div style={{
+                fontFamily: "'Cormorant Garamond', Georgia, serif",
+                fontSize: '28px', fontWeight: 500,
+                color: '#c8a96e', letterSpacing: '-0.02em',
+                lineHeight: 1,
+                marginBottom: '6px',
+              }}>{v}</div>
+              <div style={{
+                fontSize: '10px', letterSpacing: '0.24em', textTransform: 'uppercase',
+                color: 'rgba(240,236,228,0.25)',
+                fontFamily: "'DM Sans', sans-serif",
+              }}>{l}</div>
+            </div>
+          ))}
+        </motion.div>
+      </div>
+    </section>
   );
 }
