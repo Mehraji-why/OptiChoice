@@ -11,13 +11,13 @@ export default function About({ text }) {
 
         <div className="space-y-6 text-[#8a8a9a] text-lg leading-relaxed mb-16">
           <p>
-            We live in an era where choosing a laptop means opening 24 browser tabs, watching three YouTube reviews, asking three friends, and still feeling unsure. The information exists — but clarity doesn't. That gap is what OptiChoice was built to close.
+            We live in an era where choosing a laptop means opening 24 browser tabs, watching three YouTube reviews, asking three friends, and still feeling unsure. The information exists, but clarity doesn't. That gap is what OptiChoice was built to close.
           </p>
           <p>
             The idea came from a simple frustration: why does making a well-informed decision feel so exhausting? Every comparison site buries you in specs. Every review has a different opinion. Every recommendation feels like it was written for someone else.
           </p>
           <p>
-            OptiChoice is different. You describe what you need in plain language — the way you'd explain it to a knowledgeable friend — and we do the rest. We read between the lines, infer what actually matters to you, weigh the factors that fit your life, and surface one clear answer with full reasoning. No spreadsheets. No tab overload. No second-guessing.
+            OptiChoice is different. You describe what you need in plain language — the way you'd explain it to a knowledgeable friend, and we do the rest. We read between the lines, infer what actually matters to you, weigh the factors that fit your life, and surface one clear answer with full reasoning. No spreadsheets. No tab overload. No second-guessing.
           </p>
           <p style={{ color:'rgba(255,255,255,0.6)' }}>
             We believe that good decisions shouldn't require expertise. They should require honesty about what you need — and a system smart enough to listen.

@@ -1,68 +1,330 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
+
+const PILLS = [
+  'Best laptop for coding under ₹70k',
+  'Phone with great camera & battery',
+  'Tablet for note-taking & drawing',
+];
+
+const STATS = [
+  { value: '10+', label: 'Factors Weighed' },
+  { value: '100%', label: 'Transparent' },
+  { value: '₹', label: 'Budget Smart' },
+];
 
 export default function Hero({ onTryNow, text }) {
   const canvasRef = useRef(null);
+  const [mounted, setMounted] = useState(false);
+
   useEffect(() => {
+    setMounted(true);
     const canvas = canvasRef.current;
     if (!canvas) return;
     const ctx = canvas.getContext('2d');
-    let animId, w = canvas.width = canvas.offsetWidth, h = canvas.height = canvas.offsetHeight;
-    const particles = Array.from({ length: 55 }, () => ({
-      x: Math.random()*w, y: Math.random()*h, r: Math.random()*1.4+0.3,
-      dx: (Math.random()-0.5)*0.25, dy: (Math.random()-0.5)*0.25, alpha: Math.random()*0.45+0.08,
+    let animId;
+    let w = (canvas.width = canvas.offsetWidth);
+    let h = (canvas.height = canvas.offsetHeight);
+
+    // Orbs
+    const orbs = Array.from({ length: 3 }, (_, i) => ({
+      x: [0.2, 0.8, 0.5][i] * w,
+      y: [0.3, 0.6, 0.15][i] * h,
+      r: [320, 260, 200][i],
+      dx: [(Math.random() - 0.5) * 0.18, (Math.random() - 0.5) * 0.14, (Math.random() - 0.5) * 0.22][i],
+      dy: [(Math.random() - 0.5) * 0.18, (Math.random() - 0.5) * 0.14, (Math.random() - 0.5) * 0.22][i],
+      color: ['rgba(245,197,24,', 'rgba(168,216,234,', 'rgba(245,197,24,'][i],
+      alpha: [0.055, 0.04, 0.03][i],
     }));
+
+    // Stars
+    const stars = Array.from({ length: 80 }, () => ({
+      x: Math.random() * w,
+      y: Math.random() * h,
+      r: Math.random() * 1.1 + 0.2,
+      alpha: Math.random() * 0.35 + 0.05,
+      twinkle: Math.random() * Math.PI * 2,
+      speed: Math.random() * 0.015 + 0.005,
+    }));
+
     function draw() {
-      ctx.clearRect(0,0,w,h);
-      particles.forEach(p => {
-        p.x+=p.dx; p.y+=p.dy;
-        if(p.x<0)p.x=w; if(p.x>w)p.x=0; if(p.y<0)p.y=h; if(p.y>h)p.y=0;
-        ctx.beginPath(); ctx.arc(p.x,p.y,p.r,0,Math.PI*2);
-        ctx.fillStyle=`rgba(245,200,66,${p.alpha})`; ctx.fill();
+      ctx.clearRect(0, 0, w, h);
+
+      // Orbs
+      orbs.forEach(o => {
+        o.x += o.dx; o.y += o.dy;
+        if (o.x < -o.r) o.x = w + o.r;
+        if (o.x > w + o.r) o.x = -o.r;
+        if (o.y < -o.r) o.y = h + o.r;
+        if (o.y > h + o.r) o.y = -o.r;
+        const g = ctx.createRadialGradient(o.x, o.y, 0, o.x, o.y, o.r);
+        g.addColorStop(0, o.color + o.alpha + ')');
+        g.addColorStop(1, o.color + '0)');
+        ctx.beginPath();
+        ctx.arc(o.x, o.y, o.r, 0, Math.PI * 2);
+        ctx.fillStyle = g;
+        ctx.fill();
       });
-      animId=requestAnimationFrame(draw);
+
+      // Stars
+      stars.forEach(s => {
+        s.twinkle += s.speed;
+        const a = s.alpha * (0.6 + 0.4 * Math.sin(s.twinkle));
+        ctx.beginPath();
+        ctx.arc(s.x, s.y, s.r, 0, Math.PI * 2);
+        ctx.fillStyle = `rgba(255,255,255,${a})`;
+        ctx.fill();
+      });
+
+      animId = requestAnimationFrame(draw);
     }
+
     draw();
-    const onResize=()=>{w=canvas.width=canvas.offsetWidth;h=canvas.height=canvas.offsetHeight;};
-    window.addEventListener('resize',onResize);
-    return()=>{cancelAnimationFrame(animId);window.removeEventListener('resize',onResize);};
+    const onResize = () => {
+      w = canvas.width = canvas.offsetWidth;
+      h = canvas.height = canvas.offsetHeight;
+    };
+    window.addEventListener('resize', onResize);
+    return () => { cancelAnimationFrame(animId); window.removeEventListener('resize', onResize); };
   }, []);
-  const lines = (text?.hero_title||'').split('\n');
+
+  const lines = (text?.hero_title || 'Make the\nRight Choice').split('\n');
+
   return (
-    <section className="relative overflow-hidden min-h-[88vh] flex flex-col items-center justify-center px-4"
-      style={{ fontFamily:"'DM Serif Display',Georgia,serif" }}>
-      <div className="absolute inset-0 bg-[#0a0a0f]"/>
-      <div className="absolute inset-0 opacity-[0.035]" style={{ backgroundImage:'linear-gradient(#fff 1px,transparent 1px),linear-gradient(90deg,#fff 1px,transparent 1px)',backgroundSize:'64px 64px' }}/>
-      <div className="absolute top-1/3 left-1/3 w-[600px] h-[600px] rounded-full pointer-events-none" style={{ background:'radial-gradient(circle,rgba(245,200,66,0.09) 0%,transparent 70%)',filter:'blur(40px)' }}/>
-      <canvas ref={canvasRef} className="absolute inset-0 w-full h-full pointer-events-none"/>
-      <div className="relative z-10 max-w-4xl mx-auto text-center">
-        <p className="text-[#f5c842] text-xs tracking-[0.35em] uppercase mb-6 font-mono opacity-80">{text?.tagline}</p>
-        <h1 className="text-white mb-6" style={{ fontSize:'clamp(2.8rem,7vw,5.5rem)',lineHeight:1.06,letterSpacing:'-0.025em' }}>
-          {lines[0]}<br/><span style={{ color:'#f5c842' }}>{lines[1]}</span>
-        </h1>
-        <p className="text-[#888899] mb-10 max-w-lg mx-auto leading-relaxed" style={{ fontFamily:"'DM Sans',sans-serif",fontSize:'clamp(1rem,2vw,1.15rem)' }}>
-          {text?.hero_sub}
-        </p>
-        <div className="flex flex-wrap justify-center gap-2 mb-10">
-          {['Best laptop for coding under ₹70k','Phone with great camera & battery','Tablet for note-taking & drawing'].map(p=>(
-            <span key={p} className="text-sm px-4 py-2 rounded-full border border-white/10 text-white/40"
-              style={{ background:'rgba(255,255,255,0.03)',fontFamily:"'DM Sans',sans-serif" }}>"{p}"</span>
-          ))}
+    <>
+      <style>{`
+        @import url('https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Sans:ital,wght@0,300;0,400;0,500;1,300&display=swap');
+
+        .hero-root {
+          position: relative;
+          min-height: 100vh;
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+          justify-content: center;
+          padding: 120px 24px 80px;
+          overflow: hidden;
+          background: #080810;
+        }
+        .hero-grid {
+          position: absolute;
+          inset: 0;
+          background-image:
+            linear-gradient(rgba(255,255,255,0.028) 1px, transparent 1px),
+            linear-gradient(90deg, rgba(255,255,255,0.028) 1px, transparent 1px);
+          background-size: 72px 72px;
+          pointer-events: none;
+        }
+        .hero-grid-fade {
+          position: absolute;
+          inset: 0;
+          background: radial-gradient(ellipse at 50% 50%, transparent 40%, #080810 85%);
+          pointer-events: none;
+        }
+        .hero-label {
+          font-family: 'DM Sans', sans-serif;
+          font-size: 11px;
+          letter-spacing: 0.32em;
+          text-transform: uppercase;
+          color: rgba(245,197,24,0.7);
+          margin-bottom: 24px;
+          display: flex;
+          align-items: center;
+          gap: 10px;
+          opacity: 0;
+          animation: fadeUp 0.7s 0.1s cubic-bezier(0.4,0,0.2,1) forwards;
+        }
+        .hero-label::before, .hero-label::after {
+          content: '';
+          width: 24px;
+          height: 1px;
+          background: rgba(245,197,24,0.4);
+        }
+        .hero-h1 {
+          font-family: 'Syne', sans-serif;
+          font-weight: 800;
+          line-height: 1.02;
+          letter-spacing: -0.035em;
+          color: #fff;
+          text-align: center;
+          margin-bottom: 24px;
+          opacity: 0;
+          animation: fadeUp 0.8s 0.2s cubic-bezier(0.4,0,0.2,1) forwards;
+          font-size: clamp(3rem, 8vw, 6.5rem);
+        }
+        .hero-h1 span {
+          background: linear-gradient(120deg, #f5c518 20%, #e8b020 80%);
+          -webkit-background-clip: text;
+          -webkit-text-fill-color: transparent;
+          background-clip: text;
+        }
+        .hero-sub {
+          font-family: 'DM Sans', sans-serif;
+          font-size: clamp(1rem, 1.8vw, 1.15rem);
+          font-weight: 300;
+          color: rgba(255,255,255,0.45);
+          max-width: 480px;
+          line-height: 1.75;
+          text-align: center;
+          margin-bottom: 40px;
+          opacity: 0;
+          animation: fadeUp 0.8s 0.35s cubic-bezier(0.4,0,0.2,1) forwards;
+        }
+        .hero-pills {
+          display: flex;
+          flex-wrap: wrap;
+          justify-content: center;
+          gap: 8px;
+          margin-bottom: 44px;
+          opacity: 0;
+          animation: fadeUp 0.8s 0.5s cubic-bezier(0.4,0,0.2,1) forwards;
+        }
+        .pill {
+          font-family: 'DM Sans', sans-serif;
+          font-size: 12px;
+          font-style: italic;
+          font-weight: 300;
+          padding: 8px 16px;
+          border-radius: 100px;
+          border: 1px solid rgba(255,255,255,0.08);
+          color: rgba(255,255,255,0.3);
+          background: rgba(255,255,255,0.02);
+          transition: all 0.25s ease;
+          cursor: pointer;
+        }
+        .pill:hover {
+          color: rgba(255,255,255,0.6);
+          border-color: rgba(245,197,24,0.2);
+          background: rgba(245,197,24,0.04);
+        }
+        .hero-cta {
+          display: inline-flex;
+          align-items: center;
+          gap: 12px;
+          padding: 16px 36px;
+          border-radius: 100px;
+          font-family: 'DM Sans', sans-serif;
+          font-size: 14px;
+          font-weight: 500;
+          letter-spacing: 0.04em;
+          color: #080810;
+          background: linear-gradient(135deg, #f5c518, #e8a820);
+          border: none;
+          cursor: pointer;
+          transition: all 0.3s cubic-bezier(0.4,0,0.2,1);
+          box-shadow: 0 0 0 0 rgba(245,197,24,0.3), 0 4px 24px rgba(245,197,24,0.2);
+          opacity: 0;
+          animation: fadeUp 0.8s 0.6s cubic-bezier(0.4,0,0.2,1) forwards;
+        }
+        .hero-cta:hover {
+          transform: translateY(-2px) scale(1.02);
+          box-shadow: 0 0 0 6px rgba(245,197,24,0.08), 0 8px 32px rgba(245,197,24,0.3);
+        }
+        .hero-cta:active { transform: translateY(0) scale(0.99); }
+        .hero-cta svg {
+          transition: transform 0.25s ease;
+        }
+        .hero-cta:hover svg { transform: translateX(3px); }
+        .hero-stats {
+          margin-top: 72px;
+          padding-top: 32px;
+          border-top: 1px solid rgba(255,255,255,0.05);
+          display: flex;
+          justify-content: center;
+          gap: 64px;
+          opacity: 0;
+          animation: fadeUp 0.8s 0.75s cubic-bezier(0.4,0,0.2,1) forwards;
+        }
+        .stat-val {
+          font-family: 'Syne', sans-serif;
+          font-size: 24px;
+          font-weight: 700;
+          color: #f5c518;
+          letter-spacing: -0.02em;
+        }
+        .stat-label {
+          font-family: 'DM Sans', sans-serif;
+          font-size: 10px;
+          letter-spacing: 0.18em;
+          text-transform: uppercase;
+          color: rgba(255,255,255,0.2);
+          margin-top: 4px;
+        }
+        @keyframes fadeUp {
+          from { opacity: 0; transform: translateY(20px); }
+          to   { opacity: 1; transform: translateY(0); }
+        }
+        .hero-badge {
+          display: inline-flex;
+          align-items: center;
+          gap: 6px;
+          padding: 5px 12px 5px 8px;
+          border-radius: 100px;
+          border: 1px solid rgba(245,197,24,0.2);
+          background: rgba(245,197,24,0.06);
+          font-family: 'DM Sans', sans-serif;
+          font-size: 11px;
+          color: rgba(245,197,24,0.75);
+          letter-spacing: 0.06em;
+          margin-bottom: 20px;
+          opacity: 0;
+          animation: fadeUp 0.6s 0s cubic-bezier(0.4,0,0.2,1) forwards;
+        }
+        .hero-badge-dot {
+          width: 6px; height: 6px;
+          border-radius: 50%;
+          background: #f5c518;
+          animation: pulse 2s ease-in-out infinite;
+        }
+        @keyframes pulse {
+          0%, 100% { opacity: 1; transform: scale(1); }
+          50% { opacity: 0.5; transform: scale(0.8); }
+        }
+      `}</style>
+
+      <section className="hero-root">
+        <div className="hero-grid" />
+        <div className="hero-grid-fade" />
+        <canvas ref={canvasRef} style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', pointerEvents: 'none' }} />
+
+        <div style={{ position: 'relative', zIndex: 10, maxWidth: '860px', margin: '0 auto', textAlign: 'center', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+
+          <div className="hero-badge">
+            <div className="hero-badge-dot" />
+            AI-Powered Optimization Engine
+          </div>
+
+          <p className="hero-label">{text?.tagline || 'Precision Decision Intelligence'}</p>
+
+          <h1 className="hero-h1">
+            {lines[0]}
+            {lines[1] && <><br /><span>{lines[1]}</span></>}
+          </h1>
+
+          <p className="hero-sub">{text?.hero_sub || 'Describe what you need in plain language. We analyze every factor and surface the best option — with full reasoning.'}</p>
+
+          <div className="hero-pills">
+            {PILLS.map(p => (
+              <span key={p} className="pill" onClick={onTryNow}>"{p}"</span>
+            ))}
+          </div>
+
+          <button onClick={onTryNow} className="hero-cta">
+            {text?.cta || 'Find My Best Option'}
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+              <path d="M5 12h14M12 5l7 7-7 7" />
+            </svg>
+          </button>
+
+          <div className="hero-stats">
+            {STATS.map(s => (
+              <div key={s.label} style={{ textAlign: 'center' }}>
+                <div className="stat-val">{s.value}</div>
+                <div className="stat-label">{s.label}</div>
+              </div>
+            ))}
+          </div>
         </div>
-        <button onClick={onTryNow}
-          className="inline-flex items-center gap-3 px-9 py-4 rounded-full font-semibold text-[#0a0a0f] text-lg transition-all duration-300 hover:scale-105"
-          style={{ background:'linear-gradient(135deg,#f5c842,#e8a020)',fontFamily:"'DM Sans',sans-serif",boxShadow:'0 0 40px rgba(245,200,66,0.22)' }}>
-          {text?.cta}
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
-        </button>
-        <div className="mt-16 flex justify-center gap-12 border-t pt-10" style={{ borderColor:'rgba(255,255,255,0.05)' }}>
-          {[['10+','Factors Weighed'],['100%','Transparent'],['₹','Budget Smart']].map(([v,l])=>(
-            <div key={l} className="text-center">
-              <div className="text-2xl font-bold" style={{ color:'#f5c842',fontFamily:"'DM Serif Display',serif" }}>{v}</div>
-              <div className="text-[10px] text-[#44445a] mt-1 tracking-widest uppercase" style={{ fontFamily:"'DM Sans',sans-serif" }}>{l}</div>
-            </div>
-          ))}
-        </div>
-      </div>
-    </section>
+      </section>
+    </>
   );
 }
