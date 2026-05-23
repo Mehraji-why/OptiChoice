@@ -92,7 +92,8 @@ User Needs: {user_needs}
 Inferred Weights: {weights_str}
 Top Recommendation: {top_product_name}"""
     try:
-        response = client.models.generate_content(model="gemini-3.0-flash", contents=prompt)
+        response = client.models.generate_content(model="gemini-3
+        .0-flash", contents=prompt)
         return response.text.strip()
     except Exception as e:
         return f"User appears to prioritize: {', '.join(list(inferred_weights.keys())[:3])}"
