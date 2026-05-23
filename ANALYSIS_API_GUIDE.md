@@ -1,0 +1,208 @@
+# OptiChoice Analysis API Guide
+
+## Overview
+
+OptiChoice now includes intelligent decision optimization with two main endpoints:
+
+1. **`/decide`** - General decision-making with priorities and options
+2. **`/analyze`** - Structured product analysis with weighted factors
+
+## New Endpoint: `/analyze`
+
+### Purpose
+Analyzes user needs, infers intelligent priority weights for defined factors, scores products, and returns ranked recommendations.
+
+### Request Format
+
+```json
+{
+    "user_needs": "string describing what the user wants",
+    "budget": 70000,
+    "factors": {
+        "cpu_score": 0.25,
+        "gpu_score": 0.15,
+        "battery": 0.20,
+        "portability": 0.15,
+        "display": 0.10,
+        "thermals": 0.10,
+        "build_quality": 0.05
+    },
+    "products": [
+        {
+            "id": 1,
+            "name": "Product Name",
+            "price": 72000,
+            "cpu_score": 8.8,
+            "gpu_score": 8.5,
+            "battery": 5.5,
+            "portability": 4.5,
+            "display": 7.5,
+            "thermals": 8.2,
+            "build_quality": 7.0,
+            "weight": 2.4,
+            "creator_score": 7.8,
+            "student_score": 6.5,
+            "gaming_score": 9.0
+        }
+    ],
+    "constraints": ["optional", "constraints"]
+}
+```
+
+### Key Features
+
+**Smart Weight Inference:**
+- System analyzes user needs description
+- Automatically infers importance weights (0.0-1.0) for factors
+- Higher weight = more important factor
+- Weights are differentiated based on context (not all equal)
+
+**Composite Scoring:**
+- Each product receives a composite score: `Σ(factor_score × weight)`
+- Products ranked highest score first
+- Budget filtering applied automatically
+- Detailed factor breakdowns included
+
+**Intelligent Output:**
+- Ranked products with composite scores
+- Inferred weights explaining the prioritization
+- Human-readable explanation of weight inference
+- Per-product factor contributions
+
+### Response Format
+
+```json
+{
+    "budget": 70000,
+    "inferred_weights": {
+        "cpu_score": 0.9,
+        "battery": 0.8,
+        "portability": 0.7,
+        "gpu_score": 0.5
+    },
+    "explanation": "User appears to prioritize portability and battery for college/coding, while wanting moderate gaming capability.",
+    "ranked_products": [
+        {
+            "id": 1,
+            "name": "Product Name",
+            "price": 72000,
+            "composite_score": 8.23,
+            "within_budget": true,
+            "factor_scores": {
+                "cpu_score": 8.8,
+                "battery": 5.5
+            },
+            "weighted_contribution": {
+                "cpu_score": 7.92,
+                "battery": 4.40
+            }
+        }
+    ]
+}
+```
+
+## Available Factors
+
+Default factors supported:
+- `cpu_score` - CPU performance
+- `gpu_score` - GPU performance  
+- `battery` - Battery life
+- `portability` - Weight/size portability
+- `display` - Display quality
+- `thermals` - Temperature management
+- `build_quality` - Build durability
+- `gaming_score` - Gaming performance
+- `creator_score` - Content creation capability
+- `student_score` - Value for students
+
+## Example Usage
+
+### Laptop Recommendation Request
+```bash
+curl -X POST http://localhost:8000/analyze \
+  -H "Content-Type: application/json" \
+  -d '{
+    "user_needs": "College student who needs good battery life, portability for classes, and can handle some gaming in free time. Budget is INR 70,000.",
+    "budget": 70000,
+    "factors": {
+        "cpu_score": 0.25,
+        "gpu_score": 0.15,
+        "battery": 0.20,
+        "portability": 0.15,
+        "display": 0.10,
+        "thermals": 0.10,
+        "build_quality": 0.05
+    },
+    "products": [
+        {
+            "id": 1,
+            "name": "Lenovo LOQ 15",
+            "price": 72000,
+            "cpu_score": 8.8,
+            "gpu_score": 8.5,
+            "battery": 5.5,
+            "portability": 4.5,
+            "display": 7.5,
+            "thermals": 8.2,
+            "build_quality": 7.0,
+            "weight": 2.4
+        },
+        {
+            "id": 2,
+            "name": "ASUS Vivobook 15",
+            "price": 58000,
+            "cpu_score": 7.2,
+            "gpu_score": 4.5,
+            "battery": 8.4,
+            "portability": 8.0,
+            "display": 7.0,
+            "thermals": 6.8,
+            "build_quality": 7.5,
+            "weight": 1.7
+        }
+    ]
+}'
+```
+
+## Algorithm Details
+
+### Weight Inference Process
+1. User provides needs description
+2. System sends prompt to Gemini API with available factors
+3. Gemini analyzes context and returns intelligently weighted factors
+4. Weights reflect relative importance (not necessarily normalized)
+
+### Product Scoring Process
+1. For each product: `score = Σ(factor_score × inferred_weight)`
+2. Products ranked by composite score (descending)
+3. Within-budget filtering applied
+4. Secondary sort by price (lower price preferred among equal scores)
+
+### Output Explanation
+- Explanation generated by analyzing user needs vs inferred weights
+- Highlights why certain factors were prioritized
+- Provides context for top recommendation
+
+## Error Handling
+
+- **400 Bad Request**: Missing required fields or invalid input
+- **500 Internal Server Error**: API call failures (Gemini API issues)
+
+Required fields:
+- `user_needs` (non-empty string)
+- `budget` (> 0)
+- `products` (at least 1 product)
+
+## Performance Notes
+
+- Gemini API calls for weight inference and explanation generation
+- Suitable for interactive recommendations (not batch processing)
+- No database required - stateless analysis
+
+## Integration with Frontend
+
+The frontend can call this endpoint to:
+1. Accept user preferences in natural language
+2. Display inferred weights and explanation
+3. Show ranked product recommendations
+4. Highlight best matches for the user's specific needs
