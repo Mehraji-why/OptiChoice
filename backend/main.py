@@ -72,7 +72,7 @@ Respond with ONLY valid JSON (no markdown, no preamble):
 }}
 """
     try:
-        response = client.models.generate_content(model="gemini-2.0-flash-lite", contents=prompt)
+        response = client.models.generate_content(model="gemini-2.5-flash", contents=prompt)
         response_text = response.text.strip()
         if response_text.startswith("```"):
             response_text = response_text.split("```")[1]
@@ -92,7 +92,7 @@ User Needs: {user_needs}
 Inferred Weights: {weights_str}
 Top Recommendation: {top_product_name}"""
     try:
-        response = client.models.generate_content(model="gemini-2.0-flash-lite", contents=prompt)
+        response = client.models.generate_content(model="gemini-2.5-flash", contents=prompt)
         return response.text.strip()
     except Exception as e:
         return f"User appears to prioritize: {', '.join(list(inferred_weights.keys())[:3])}"
@@ -154,7 +154,7 @@ Respond with ONLY valid JSON (no markdown):
 }}
 """
     try:
-        response = client.models.generate_content(model="gemini-2.0-flash-lite", contents=prompt)
+        response = client.models.generate_content(model="gemini-2.5-flash", contents=prompt)
         response_text = response.text.strip()
         if response_text.startswith("```"):
             response_text = response_text.split("```")[1]
