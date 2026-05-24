@@ -1,15 +1,13 @@
 import { useState, useEffect, useMemo, useRef } from 'react';
-import { motion, AnimatePresence, useMotionValue, useSpring, useTransform } from 'framer-motion';
+import { motion, AnimatePresence } from 'framer-motion';
 import { submitAnalysis } from '../api/client';
 
-/* ─────────────────────────────────────────────────────────────
-   CONSTANTS  (unchanged logic, richer meta)
-───────────────────────────────────────────────────────────── */
 const PLACEHOLDERS = [
   'Best laptop for coding under ₹70k',
-  'Phone with great camera and battery',
-  'Laptop for gaming and college',
-  'Best tablet for note taking',
+  'Phone with great camera and battery under ₹40k',
+  'Laptop for gaming and college under ₹80k',
+  'Best tablet for note taking and drawing',
+  'Lightweight laptop for travel under ₹65k',
 ];
 
 const DEFAULT_FACTORS = {
@@ -23,274 +21,522 @@ const DEFAULT_FACTORS = {
 };
 
 const FACTOR_META = {
-  cpu_score:     { label: 'CPU Performance',   desc: 'Processing speed & multi-core throughput', color: '#c8a96e',  icon: '⬡' },
-  gpu_score:     { label: 'GPU Performance',   desc: 'Graphics rendering & compute capability',  color: '#b8a898',  icon: '◈' },
-  battery:       { label: 'Battery Life',      desc: 'Runtime endurance on a single charge',     color: '#8eab96',  icon: '◉' },
-  portability:   { label: 'Portability',       desc: 'Weight, form factor & on-the-go ease',     color: '#9eaab8',  icon: '◇' },
-  display:       { label: 'Display Quality',   desc: 'Resolution, colour accuracy & brightness', color: '#b8a0a0',  icon: '▣' },
-  thermals:      { label: 'Thermal Management',desc: 'Cooling efficiency under sustained load',  color: '#a8a090',  icon: '◬' },
-  build_quality: { label: 'Build Quality',     desc: 'Materials, chassis rigidity & longevity',  color: '#a8b0a0',  icon: '◫' },
+  cpu_score:     { label: 'Processing Power', abbr: 'CPU',  color: '#c8a96e', desc: 'Raw compute speed' },
+  gpu_score:     { label: 'Graphics',          abbr: 'GPU',  color: '#b8a898', desc: 'Gaming & visuals' },
+  battery:       { label: 'Battery Life',      abbr: 'BATT', color: '#8eab96', desc: 'Hours of use' },
+  portability:   { label: 'Portability',       abbr: 'PORT', color: '#9eaab8', desc: 'Weight & form' },
+  display:       { label: 'Display Quality',   abbr: 'DISP', color: '#c0a8b8', desc: 'Panel & resolution' },
+  thermals:      { label: 'Thermal Mgmt',      abbr: 'THRM', color: '#a8a090', desc: 'Heat & cooling' },
+  build_quality: { label: 'Build Quality',     abbr: 'BILD', color: '#a0b4a0', desc: 'Material & feel' },
 };
 
 const PRODUCTS = [
-  { id:1, name:'Lenovo LOQ 15',    price:72000, cpu_score:8.8, gpu_score:8.5, battery:5.5, portability:4.5, display:7.5, thermals:8.2, build_quality:7.0, creator_score:7.8, student_score:6.5, gaming_score:9.0, image:'https://via.placeholder.com/520x320?text=Lenovo+LOQ+15' },
-  { id:2, name:'ASUS Vivobook 15', price:58000, cpu_score:7.2, gpu_score:4.5, battery:8.4, portability:8.0, display:7.0, thermals:6.8, build_quality:7.5, weight:1.7, creator_score:6.2, student_score:9.0, gaming_score:4.0, image:'https://via.placeholder.com/520x320?text=ASUS+Vivobook+15' },
-  { id:3, name:'MacBook Air M2',   price:95000, cpu_score:9.0, gpu_score:6.8, battery:9.8, portability:9.5, display:9.2, thermals:9.1, build_quality:9.5, weight:1.24, creator_score:9.0, student_score:9.5, gaming_score:3.5, image:'https://via.placeholder.com/520x320?text=MacBook+Air+M2' },
-  { id:4, name:'HP Victus',        price:68000, cpu_score:8.1, gpu_score:8.0, battery:5.8, portability:5.0, display:7.3, thermals:7.8, build_quality:6.8, weight:2.3, creator_score:7.0, student_score:6.0, gaming_score:8.5, image:'https://via.placeholder.com/520x320?text=HP+Victus' },
-  { id:5, name:'Acer Aspire Lite', price:42000, cpu_score:6.0, gpu_score:3.0, battery:7.2, portability:7.8, display:6.2, thermals:6.0, build_quality:6.1, weight:1.6, creator_score:4.8, student_score:8.2, gaming_score:2.5, image:'https://via.placeholder.com/520x320?text=Acer+Aspire+Lite' },
+  { id:1, name:'Lenovo LOQ 15',    price:72000, cpu_score:8.8, gpu_score:8.5, battery:5.5, portability:4.5, display:7.5, thermals:8.2, build_quality:7.0, creator_score:7.8, student_score:6.5, gaming_score:9.0, image:'https://via.placeholder.com/520x320?text=Lenovo+LOQ+15', url:'#' },
+  { id:2, name:'ASUS Vivobook 15', price:58000, cpu_score:7.2, gpu_score:4.5, battery:8.4, portability:8.0, display:7.0, thermals:6.8, build_quality:7.5, creator_score:6.2, student_score:9.0, gaming_score:4.0, image:'https://via.placeholder.com/520x320?text=ASUS+Vivobook+15', url:'#' },
+  { id:3, name:'MacBook Air M2',   price:95000, cpu_score:9.0, gpu_score:6.8, battery:9.8, portability:9.5, display:9.2, thermals:9.1, build_quality:9.5, creator_score:9.0, student_score:9.5, gaming_score:3.5, image:'https://via.placeholder.com/520x320?text=MacBook+Air+M2', url:'#' },
+  { id:4, name:'HP Victus',        price:68000, cpu_score:8.1, gpu_score:8.0, battery:5.8, portability:5.0, display:7.3, thermals:7.8, build_quality:6.8, creator_score:7.0, student_score:6.0, gaming_score:8.5, image:'https://via.placeholder.com/520x320?text=HP+Victus', url:'#' },
+  { id:5, name:'Acer Aspire Lite', price:42000, cpu_score:6.0, gpu_score:3.0, battery:7.2, portability:7.8, display:6.2, thermals:6.0, build_quality:6.1, creator_score:4.8, student_score:8.2, gaming_score:2.5, image:'https://via.placeholder.com/520x320?text=Acer+Aspire+Lite', url:'#' },
 ];
 
-/* ─────────────────────────────────────────────────────────────
-   UNCHANGED LOGIC
-───────────────────────────────────────────────────────────── */
-function extractBudget(text) {
-  const m = text.match(/₹\s*([0-9,]+)/) || text.match(/rs\.?\s*([0-9,]+)/i) || text.match(/([0-9]{4,6})/);
-  if (!m) return 70000;
-  return parseInt(m[1].replace(/,/g, ''), 10) || 70000;
-}
+// ── Loading mini-game & quotes ──
+const LOADING_QUOTES = [
+  { text: 'Utility is not a number. It is the gap between what you need and what exists.', src: 'Optimisation Theory' },
+  { text: 'In multi-criteria decision making, there is no single best — only the best for you.', src: 'Operations Research' },
+  { text: 'Pareto efficiency: reject any option that is dominated on every dimension.', src: 'Vilfredo Pareto, 1896' },
+  { text: 'TOPSIS ranks by distance from ideal — not by score alone, but by position in solution space.', src: 'Hwang & Yoon, 1981' },
+  { text: 'The regret score measures what you sacrifice by choosing this over the optimal.', src: 'Regret Theory' },
+  { text: 'True constraints narrow the feasible region. Everything else is preference.', src: 'Linear Programming' },
+  { text: 'Sensitivity analysis asks: what single change would most improve your outcome?', src: 'Decision Science' },
+  { text: 'A sigmoid utility curve means: the difference between bad and adequate matters more than the difference between good and excellent.', src: 'Behavioural Economics' },
+];
 
-/* ─────────────────────────────────────────────────────────────
-   DESIGN TOKENS
-───────────────────────────────────────────────────────────── */
-const T = {
-  bg:        '#0b0a08',
-  surface:   '#16140f',
-  surfaceHi: '#1d1a13',
-  border:    'rgba(200,185,155,0.09)',
-  borderHi:  'rgba(200,169,110,0.28)',
-  gold:      '#c8a96e',
-  goldSoft:  'rgba(200,169,110,0.55)',
-  goldDim:   'rgba(200,169,110,0.1)',
-  cream:     '#f0ece4',
-  creamDim:  'rgba(240,236,228,0.38)',
-  creamFaint:'rgba(240,236,228,0.14)',
-  serif:     "'Cormorant Garamond', Georgia, serif",
-  sans:      "'DM Sans', sans-serif",
-};
+const PIPELINE_STAGES = [
+  { id: 'inference',      label: 'Semantic Inference',    sub: 'Extracting priorities from language' },
+  { id: 'normalise',      label: 'Context Normalisation', sub: 'Applying per-factor utility curves' },
+  { id: 'interactions',   label: 'Interaction Effects',   sub: 'Detecting component conflicts' },
+  { id: 'utility',        label: 'Utility Computation',   sub: 'Weighted scoring with penalties' },
+  { id: 'pareto',         label: 'Pareto Filtering',      sub: 'Eliminating dominated options' },
+  { id: 'topsis',         label: 'TOPSIS Ranking',        sub: 'Distance from ideal solution' },
+  { id: 'regret',         label: 'Regret Analysis',       sub: 'Opportunity cost per option' },
+  { id: 'sensitivity',    label: 'Sensitivity Analysis',  sub: 'Computing marginal improvements' },
+];
 
-/* ─────────────────────────────────────────────────────────────
-   AMBIENT BACKGROUND CANVAS
-───────────────────────────────────────────────────────────── */
-function AmbientBg() {
-  const ref = useRef(null);
+function LoadingExperience() {
+  const [stage, setStage] = useState(0);
+  const [quoteIdx, setQuoteIdx] = useState(() => Math.floor(Math.random() * LOADING_QUOTES.length));
+  const [quoteVisible, setQuoteVisible] = useState(true);
+  const [game, setGame] = useState(null); // null | 'running'
+  const [score, setScore] = useState(0);
+  const [dots, setDots] = useState([]);
+  const canvasRef = useRef(null);
+  const gameRef = useRef(null);
+
+  // Advance pipeline stages
   useEffect(() => {
-    const c = ref.current; if (!c) return;
-    const ctx = c.getContext('2d');
-    let id;
-    const resize = () => { c.width = window.innerWidth; c.height = window.innerHeight; };
-    resize();
-    window.addEventListener('resize', resize);
-    const orbs = [
-      { x:0.15, y:0.25, r:0.38, color:[200,169,110], a:0.028, spd:0.00007 },
-      { x:0.85, y:0.55, r:0.30, color:[100,140,200], a:0.018, spd:0.00005 },
-      { x:0.50, y:0.80, r:0.25, color:[140,180,150], a:0.016, spd:0.00009 },
-    ];
-    const t0 = performance.now();
-    const draw = (now) => {
-      id = requestAnimationFrame(draw);
-      ctx.clearRect(0, 0, c.width, c.height);
-      orbs.forEach((o, i) => {
-        const t = now - t0;
-        const px = (o.x + Math.sin(t * o.spd + i) * 0.08) * c.width;
-        const py = (o.y + Math.cos(t * o.spd * 0.7 + i) * 0.06) * c.height;
-        const rad = o.r * Math.min(c.width, c.height);
-        const g = ctx.createRadialGradient(px, py, 0, px, py, rad);
-        g.addColorStop(0, `rgba(${o.color.join(',')},${o.a})`);
-        g.addColorStop(1, `rgba(${o.color.join(',')},0)`);
-        ctx.fillStyle = g;
-        ctx.fillRect(0, 0, c.width, c.height);
-      });
-    };
-    id = requestAnimationFrame(draw);
-    return () => { cancelAnimationFrame(id); window.removeEventListener('resize', resize); };
+    let s = 0;
+    const iv = setInterval(() => {
+      s++;
+      if (s < PIPELINE_STAGES.length) setStage(s);
+      else clearInterval(iv);
+    }, 680);
+    return () => clearInterval(iv);
   }, []);
-  return (
-    <canvas ref={ref} style={{
-      position:'fixed', inset:0, width:'100%', height:'100%',
-      pointerEvents:'none', zIndex:0, opacity:0.85,
-    }} />
-  );
-}
 
-/* ─────────────────────────────────────────────────────────────
-   FACTOR SLIDER  — rich, full label, tooltip, 3D thumb
-───────────────────────────────────────────────────────────── */
-function FactorSlider({ factor, value, onChange }) {
-  const meta = FACTOR_META[factor];
-  const [dragging, setDragging] = useState(false);
-  const [tooltipVisible, setTooltipVisible] = useState(false);
-  const pct = value * 100;
+  // Rotate quotes
+  useEffect(() => {
+    const iv = setInterval(() => {
+      setQuoteVisible(false);
+      setTimeout(() => {
+        setQuoteIdx(i => (i + 1) % LOADING_QUOTES.length);
+        setQuoteVisible(true);
+      }, 400);
+    }, 5500);
+    return () => clearInterval(iv);
+  }, []);
+
+  // Mini dot-catch game
+  const spawnDot = () => {
+    const id = Date.now() + Math.random();
+    const x = 10 + Math.random() * 80;
+    const y = 10 + Math.random() * 80;
+    setDots(d => [...d, { id, x, y }]);
+    setTimeout(() => {
+      setDots(d => d.filter(dot => dot.id !== id));
+    }, 2200);
+  };
+
+  useEffect(() => {
+    const iv = setInterval(spawnDot, 900);
+    spawnDot();
+    return () => clearInterval(iv);
+  }, []);
+
+  const catchDot = (id) => {
+    setDots(d => d.filter(dot => dot.id !== id));
+    setScore(s => s + 1);
+  };
+
+  const currentQuote = LOADING_QUOTES[quoteIdx];
+  const completedStages = stage + 1;
+  const pct = Math.round((completedStages / PIPELINE_STAGES.length) * 100);
 
   return (
     <motion.div
-      initial={{ opacity:0, y:8 }}
-      animate={{ opacity:1, y:0 }}
-      style={{ marginBottom:0, position:'relative' }}
-      onMouseEnter={() => setTooltipVisible(true)}
-      onMouseLeave={() => setTooltipVisible(false)}
+      initial={{ opacity: 0, y: 16 }}
+      animate={{ opacity: 1, y: 0 }}
+      exit={{ opacity: 0, y: -16 }}
+      transition={{ duration: 0.5, ease: [0.22, 1, 0.36, 1] }}
+      style={{
+        minHeight: '100vh',
+        background: '#0e0c0a',
+        fontFamily: "'DM Sans', sans-serif",
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'center',
+        justifyContent: 'center',
+        padding: '48px 24px',
+        position: 'relative',
+        overflow: 'hidden',
+      }}
     >
-      {/* Row: label + percent */}
-      <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-end', marginBottom:10 }}>
-        <div>
-          <div style={{ display:'flex', alignItems:'center', gap:7, marginBottom:3 }}>
-            <span style={{ fontSize:14, color:meta.color, opacity:0.7, lineHeight:1 }}>{meta.icon}</span>
-            <span style={{ fontSize:11.5, letterSpacing:'0.08em', textTransform:'uppercase', color:meta.color, fontFamily:T.sans, fontWeight:500 }}>
-              {meta.label}
+      {/* Background grid */}
+      <div style={{
+        position: 'fixed', inset: 0, pointerEvents: 'none',
+        backgroundImage: 'linear-gradient(rgba(200,190,170,0.018) 1px, transparent 1px), linear-gradient(90deg, rgba(200,190,170,0.018) 1px, transparent 1px)',
+        backgroundSize: '80px 80px',
+      }} />
+
+      <div style={{ position: 'relative', zIndex: 1, maxWidth: '680px', width: '100%' }}>
+
+        {/* Header */}
+        <div style={{ marginBottom: '48px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '16px' }}>
+            <motion.div
+              animate={{ rotate: 360 }}
+              transition={{ repeat: Infinity, duration: 3, ease: 'linear' }}
+              style={{
+                width: '20px', height: '20px',
+                border: '1.5px solid rgba(200,169,110,0.3)',
+                borderTopColor: '#c8a96e',
+                borderRadius: '50%',
+              }}
+            />
+            <span style={{
+              fontSize: '10px', letterSpacing: '0.3em', textTransform: 'uppercase',
+              color: 'rgba(200,169,110,0.6)',
+            }}>
+              Optimisation Engine · Running
             </span>
           </div>
-          <AnimatePresence>
-            {tooltipVisible && (
-              <motion.p initial={{ opacity:0, y:2 }} animate={{ opacity:1, y:0 }} exit={{ opacity:0, y:2 }} transition={{ duration:0.18 }}
-                style={{ fontSize:10, color:'rgba(240,236,228,0.28)', fontFamily:T.sans, letterSpacing:'0.03em', lineHeight:1.5 }}>
-                {meta.desc}
-              </motion.p>
-            )}
-          </AnimatePresence>
+          <h2 style={{
+            fontFamily: "'Cormorant Garamond', Georgia, serif",
+            fontSize: 'clamp(1.8rem, 4vw, 2.8rem)',
+            fontWeight: 500,
+            color: '#f0ece4',
+            letterSpacing: '-0.03em',
+            lineHeight: 1.08,
+            marginBottom: '8px',
+          }}>
+            Computing your <span style={{ color: '#c8a96e', fontStyle: 'italic' }}>optimal choice.</span>
+          </h2>
+          <p style={{ fontSize: '13px', color: 'rgba(240,236,228,0.32)', letterSpacing: '0.04em' }}>
+            {pct}% complete — {PIPELINE_STAGES[stage]?.label}
+          </p>
         </div>
-        <div style={{ display:'flex', alignItems:'baseline', gap:2 }}>
-          <span style={{ fontSize:18, fontFamily:T.serif, fontWeight:500, color: dragging ? meta.color : T.cream, transition:'color 0.2s', letterSpacing:'-0.02em' }}>
-            {Math.round(pct)}
+
+        {/* Progress bar */}
+        <div style={{
+          height: '1px',
+          background: 'rgba(240,236,228,0.06)',
+          marginBottom: '32px',
+          position: 'relative',
+        }}>
+          <motion.div
+            animate={{ width: `${pct}%` }}
+            transition={{ duration: 0.6, ease: [0.22, 1, 0.36, 1] }}
+            style={{
+              position: 'absolute', left: 0, top: 0,
+              height: '100%', background: '#c8a96e',
+            }}
+          />
+        </div>
+
+        {/* Pipeline stages */}
+        <div style={{ marginBottom: '48px' }}>
+          {PIPELINE_STAGES.map((s, i) => {
+            const done = i <= stage;
+            const active = i === stage;
+            return (
+              <motion.div
+                key={s.id}
+                animate={{ opacity: done ? 1 : 0.22 }}
+                transition={{ duration: 0.4 }}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '16px',
+                  padding: '10px 0',
+                  borderBottom: '1px solid rgba(200,190,170,0.04)',
+                }}
+              >
+                {/* Status dot */}
+                <div style={{
+                  width: '6px', height: '6px',
+                  borderRadius: '50%',
+                  background: active ? '#c8a96e' : done ? '#8eab96' : 'rgba(240,236,228,0.1)',
+                  flexShrink: 0,
+                  boxShadow: active ? '0 0 8px rgba(200,169,110,0.5)' : 'none',
+                  transition: 'all 0.3s',
+                }} />
+                <div style={{ flex: 1 }}>
+                  <span style={{
+                    fontSize: '12px',
+                    color: active ? '#f0ece4' : done ? 'rgba(240,236,228,0.55)' : 'rgba(240,236,228,0.18)',
+                    letterSpacing: '0.04em',
+                    transition: 'color 0.3s',
+                  }}>
+                    {s.label}
+                  </span>
+                  {active && (
+                    <motion.span
+                      initial={{ opacity: 0 }}
+                      animate={{ opacity: 1 }}
+                      style={{
+                        display: 'block',
+                        fontSize: '10.5px',
+                        color: 'rgba(200,169,110,0.5)',
+                        letterSpacing: '0.08em',
+                        marginTop: '2px',
+                      }}
+                    >
+                      {s.sub}
+                    </motion.span>
+                  )}
+                </div>
+                {done && !active && (
+                  <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#8eab96" strokeWidth="2.5">
+                    <polyline points="20 6 9 17 4 12" />
+                  </svg>
+                )}
+                {active && (
+                  <motion.div
+                    animate={{ opacity: [0.4, 1, 0.4] }}
+                    transition={{ repeat: Infinity, duration: 1.4 }}
+                    style={{
+                      fontSize: '9px', letterSpacing: '0.22em',
+                      color: '#c8a96e', textTransform: 'uppercase',
+                    }}
+                  >
+                    Running
+                  </motion.div>
+                )}
+              </motion.div>
+            );
+          })}
+        </div>
+
+        {/* Divider */}
+        <div style={{
+          display: 'flex', alignItems: 'center', gap: '16px', marginBottom: '32px',
+        }}>
+          <div style={{ flex: 1, height: '1px', background: 'rgba(200,190,170,0.08)' }} />
+          <span style={{ fontSize: '9px', letterSpacing: '0.28em', textTransform: 'uppercase', color: 'rgba(240,236,228,0.2)' }}>
+            While you wait
           </span>
-          <span style={{ fontSize:9, color:'rgba(240,236,228,0.22)', fontFamily:T.sans, letterSpacing:'0.12em' }}>%</span>
+          <div style={{ flex: 1, height: '1px', background: 'rgba(200,190,170,0.08)' }} />
+        </div>
+
+        {/* Two-column: quote + mini game */}
+        <div style={{
+          display: 'grid',
+          gridTemplateColumns: '1fr 1fr',
+          gap: '2px',
+          marginBottom: '0',
+        }}
+          className="loading-grid"
+        >
+          {/* Quote panel */}
+          <div style={{
+            border: '1px solid rgba(200,190,170,0.09)',
+            padding: '28px',
+            background: 'rgba(240,236,228,0.01)',
+            minHeight: '180px',
+            display: 'flex',
+            flexDirection: 'column',
+            justifyContent: 'space-between',
+          }}>
+            <p style={{
+              fontSize: '9px', letterSpacing: '0.28em', textTransform: 'uppercase',
+              color: 'rgba(200,169,110,0.4)', marginBottom: '16px',
+            }}>
+              Engine Wisdom
+            </p>
+            <AnimatePresence mode="wait">
+              {quoteVisible && (
+                <motion.div
+                  key={quoteIdx}
+                  initial={{ opacity: 0, y: 6 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -6 }}
+                  transition={{ duration: 0.38 }}
+                >
+                  <p style={{
+                    fontFamily: "'Cormorant Garamond', Georgia, serif",
+                    fontSize: '15px',
+                    fontStyle: 'italic',
+                    color: 'rgba(240,236,228,0.68)',
+                    lineHeight: 1.6,
+                    marginBottom: '14px',
+                    letterSpacing: '0.01em',
+                  }}>
+                    "{currentQuote.text}"
+                  </p>
+                  <span style={{
+                    fontSize: '9.5px', letterSpacing: '0.2em',
+                    color: 'rgba(200,169,110,0.45)',
+                    textTransform: 'uppercase',
+                  }}>
+                    — {currentQuote.src}
+                  </span>
+                </motion.div>
+              )}
+            </AnimatePresence>
+          </div>
+
+          {/* Dot-catch game */}
+          <div style={{
+            border: '1px solid rgba(200,190,170,0.09)',
+            padding: '28px',
+            background: 'rgba(240,236,228,0.01)',
+            minHeight: '180px',
+            display: 'flex',
+            flexDirection: 'column',
+          }}>
+            <div style={{
+              display: 'flex', justifyContent: 'space-between',
+              alignItems: 'center', marginBottom: '16px',
+            }}>
+              <p style={{
+                fontSize: '9px', letterSpacing: '0.28em', textTransform: 'uppercase',
+                color: 'rgba(200,169,110,0.4)',
+              }}>
+                Catch the nodes
+              </p>
+              <span style={{
+                fontFamily: 'monospace',
+                fontSize: '13px',
+                color: '#c8a96e',
+              }}>
+                {score}
+              </span>
+            </div>
+
+            <div style={{
+              flex: 1,
+              position: 'relative',
+              background: 'rgba(200,190,170,0.02)',
+              border: '1px solid rgba(200,190,170,0.06)',
+              overflow: 'hidden',
+              minHeight: '110px',
+            }}>
+              <AnimatePresence>
+                {dots.map(dot => (
+                  <motion.button
+                    key={dot.id}
+                    initial={{ scale: 0, opacity: 0 }}
+                    animate={{ scale: 1, opacity: 1 }}
+                    exit={{ scale: 0, opacity: 0 }}
+                    transition={{ duration: 0.2 }}
+                    onClick={() => catchDot(dot.id)}
+                    style={{
+                      position: 'absolute',
+                      left: `${dot.x}%`,
+                      top: `${dot.y}%`,
+                      transform: 'translate(-50%, -50%)',
+                      width: '22px', height: '22px',
+                      borderRadius: '50%',
+                      background: 'none',
+                      border: '1.5px solid #c8a96e',
+                      cursor: 'pointer',
+                      display: 'flex', alignItems: 'center', justifyContent: 'center',
+                      padding: 0,
+                    }}
+                  >
+                    <div style={{
+                      width: '6px', height: '6px',
+                      borderRadius: '50%',
+                      background: '#c8a96e',
+                      opacity: 0.7,
+                    }} />
+                  </motion.button>
+                ))}
+              </AnimatePresence>
+
+              {/* Grid lines inside game */}
+              <div style={{
+                position: 'absolute', inset: 0, pointerEvents: 'none',
+                backgroundImage: 'linear-gradient(rgba(200,190,170,0.04) 1px, transparent 1px), linear-gradient(90deg, rgba(200,190,170,0.04) 1px, transparent 1px)',
+                backgroundSize: '30px 30px',
+              }} />
+            </div>
+
+            <p style={{
+              fontSize: '9.5px', color: 'rgba(240,236,228,0.2)',
+              letterSpacing: '0.1em', marginTop: '10px', textAlign: 'center',
+            }}>
+              nodes appear and fade — tap to catch
+            </p>
+          </div>
         </div>
       </div>
 
-      {/* Track + fill */}
-      <div style={{ position:'relative', height:3, background:'rgba(240,236,228,0.06)', borderRadius:2, marginBottom:6 }}>
-        <motion.div
-          animate={{ width:`${pct}%` }}
-          transition={{ duration:0.1 }}
-          style={{
-            position:'absolute', left:0, top:0, height:'100%', borderRadius:2,
-            background:`linear-gradient(90deg, ${meta.color}88, ${meta.color})`,
-            boxShadow: dragging ? `0 0 10px ${meta.color}55` : 'none',
-            transition:'box-shadow 0.2s',
-          }}
-        />
-        {/* Glow dot at fill end */}
-        <motion.div
-          animate={{ left:`${pct}%` }}
-          transition={{ duration:0.1 }}
-          style={{
-            position:'absolute', top:'50%',
-            width:dragging ? 12 : 8, height:dragging ? 12 : 8,
-            transform:'translate(-50%, -50%)',
-            background:meta.color,
-            borderRadius:'50%',
-            boxShadow: dragging ? `0 0 18px ${meta.color}99, 0 0 6px ${meta.color}` : `0 0 6px ${meta.color}66`,
-            transition:'width 0.15s, height 0.15s, box-shadow 0.2s',
-            pointerEvents:'none',
-          }}
-        />
-      </div>
-
-      {/* Native range — invisible, sits on top for interaction */}
-      <input
-        type="range" min="0" max="1" step="0.01"
-        value={value}
-        onChange={e => onChange(factor, e.target.value)}
-        onMouseDown={() => setDragging(true)}
-        onMouseUp={() => setDragging(false)}
-        onTouchStart={() => setDragging(true)}
-        onTouchEnd={() => setDragging(false)}
-        aria-label={meta.label}
-        style={{
-          position:'absolute', bottom:0, left:0, width:'100%',
-          height:'18px', opacity:0, cursor:'pointer', margin:0,
-          WebkitAppearance:'none', appearance:'none',
-        }}
-      />
+      <style>{`
+        @media (max-width: 600px) {
+          .loading-grid { grid-template-columns: 1fr !important; }
+        }
+      `}</style>
     </motion.div>
   );
 }
 
-/* ─────────────────────────────────────────────────────────────
-   WEIGHT RADIAL RING — live donut chart for right panel
-───────────────────────────────────────────────────────────── */
-function WeightRing({ factors }) {
-  const sorted = Object.entries(factors).sort((a,b) => b[1]-a[1]);
-  const total = sorted.reduce((s,[,v])=>s+v,0) || 1;
-  const size = 120;
-  const cx = size/2, cy = size/2, r = 44, stroke = 10;
-  const circ = 2 * Math.PI * r;
-  let offset = 0;
-  const arcs = sorted.map(([k,v]) => {
-    const meta = FACTOR_META[k];
-    const pct = v / total;
-    const dash = pct * circ;
-    const gap  = circ - dash;
-    const arc = { key:k, color:meta.color, dash, gap, offset, pct };
-    offset += dash;
-    return arc;
-  });
+function extractBudget(text) {
+  const m = text.match(/₹\s*([0-9,]+)/) || text.match(/rs\.?\s*([0-9,]+)/i) || text.match(/([0-9]{4,6})/);
+  if (!m) return null;
+  const n = parseInt(m[1].replace(/,/g, ''), 10);
+  return isNaN(n) ? null : n;
+}
 
+function FactorBar({ factor, value, onChange }) {
+  const meta = FACTOR_META[factor];
+  const [hov, setHov] = useState(false);
   return (
-    <div style={{ display:'flex', justifyContent:'center', marginBottom:24, position:'relative' }}>
-      <svg width={size} height={size} style={{ transform:'rotate(-90deg)', overflow:'visible' }}>
-        {/* Track */}
-        <circle cx={cx} cy={cy} r={r} fill="none" stroke="rgba(240,236,228,0.05)" strokeWidth={stroke} />
-        {arcs.map(arc => (
-          <motion.circle
-            key={arc.key}
-            cx={cx} cy={cy} r={r} fill="none"
-            stroke={arc.color}
-            strokeWidth={stroke}
-            strokeDasharray={`${arc.dash} ${arc.gap}`}
-            strokeDashoffset={-arc.offset}
-            strokeLinecap="butt"
-            animate={{ strokeDasharray:`${arc.dash} ${arc.gap}` }}
-            transition={{ duration:0.22, ease:'easeOut' }}
-            style={{ opacity:0.85 }}
-          />
-        ))}
-      </svg>
-      {/* Centre label */}
-      <div style={{ position:'absolute', top:'50%', left:'50%', transform:'translate(-50%,-50%)', textAlign:'center' }}>
-        <div style={{ fontFamily:T.serif, fontSize:20, fontWeight:500, color:T.cream, lineHeight:1 }}>
-          {Math.round(arcs[0]?.[1]?.pct*100 ?? sorted[0]?.[1]*100)}
+    <div
+      style={{ marginBottom: '18px', cursor: 'default' }}
+      onMouseEnter={() => setHov(true)}
+      onMouseLeave={() => setHov(false)}
+    >
+      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
+        <div>
+          <span style={{
+            fontSize: '10.5px', letterSpacing: '0.18em', textTransform: 'uppercase',
+            color: hov ? meta.color : 'rgba(240,236,228,0.45)',
+            fontFamily: "'DM Sans', sans-serif", fontWeight: 500,
+            transition: 'color 0.2s',
+          }}>
+            {meta.abbr}
+          </span>
+          {hov && (
+            <motion.span
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              style={{
+                marginLeft: '8px',
+                fontSize: '9.5px',
+                color: 'rgba(240,236,228,0.25)',
+                letterSpacing: '0.06em',
+              }}
+            >
+              {meta.desc}
+            </motion.span>
+          )}
         </div>
-        <div style={{ fontSize:8, letterSpacing:'0.18em', textTransform:'uppercase', color:T.goldSoft, marginTop:2 }}>top</div>
+        <span style={{
+          fontSize: '10.5px', fontFamily: 'monospace',
+          color: 'rgba(240,236,228,0.4)',
+        }}>
+          {Math.round(value * 100)}
+        </span>
       </div>
+      <div style={{ position: 'relative', height: '2px', background: 'rgba(240,236,228,0.06)', borderRadius: '1px', marginBottom: '6px' }}>
+        <motion.div
+          animate={{ width: `${value * 100}%` }}
+          transition={{ duration: 0.1 }}
+          style={{ position: 'absolute', left: 0, top: 0, height: '100%', background: meta.color, borderRadius: '1px' }}
+        />
+      </div>
+      <input
+        type="range" min="0" max="1" step="0.01"
+        value={value}
+        onChange={e => onChange(factor, e.target.value)}
+        style={{
+          width: '100%', appearance: 'none', WebkitAppearance: 'none',
+          background: 'transparent', cursor: 'pointer', height: '2px',
+          accentColor: meta.color,
+        }}
+        aria-label={meta.label}
+      />
     </div>
   );
 }
 
-/* ─────────────────────────────────────────────────────────────
-   MAIN COMPONENT
-───────────────────────────────────────────────────────────── */
 export default function DecisionForm({ onResultsReady, onBackHome }) {
-  const [query, setQuery]           = useState('');
-  const [pIdx, setPIdx]             = useState(0);
-  const [loading, setLoading]       = useState(false);
-  const [error, setError]           = useState('');
-  const [factors, setFactors]       = useState(DEFAULT_FACTORS);
+  const [query, setQuery] = useState('');
+  const [pIdx, setPIdx] = useState(0);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+  const [factors, setFactors] = useState(DEFAULT_FACTORS);
   const [constraints, setConstraints] = useState('');
-  const [focused, setFocused]       = useState(false);
-  const [cFocused, setCFocused]     = useState(false);
-  const [slidersOpen, setSlidersOpen] = useState(true);
-  const textareaRef = useRef(null);
+  const [focused, setFocused] = useState(false);
+  const [constraintFocused, setConstraintFocused] = useState(false);
 
-  /* rotate placeholder */
   useEffect(() => {
-    const iv = setInterval(() => setPIdx(i => (i+1) % PLACEHOLDERS.length), 3800);
+    const iv = setInterval(() => setPIdx(i => (i + 1) % PLACEHOLDERS.length), 3800);
     return () => clearInterval(iv);
   }, []);
 
-  /* budget parse — UNCHANGED */
-  const budget = useMemo(() => extractBudget(query), [query]);
+  const detectedBudget = useMemo(() => extractBudget(query), [query]);
 
-  /* slider handler — UNCHANGED */
   const handleSlider = (factor, val) => {
     setFactors(prev => ({ ...prev, [factor]: Number(val) }));
   };
 
-  /* submit — UNCHANGED */
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError('');
     if (!query.trim()) { setError('Please describe what you need.'); return; }
     setLoading(true);
     try {
+      const budget = detectedBudget || 70000;
       const res = await submitAnalysis({
         user_needs: query.trim(),
         budget,
@@ -301,472 +547,463 @@ export default function DecisionForm({ onResultsReady, onBackHome }) {
       onResultsReady(res);
     } catch (err) {
       setError(err.message || 'Something went wrong.');
-    } finally {
       setLoading(false);
     }
   };
 
-  const totalWeight = Object.values(factors).reduce((a,b) => a+b, 0);
-  const sortedFactors = Object.entries(factors).sort((a,b) => b[1]-a[1]);
+  const totalWeight = Object.values(factors).reduce((a, b) => a + b, 0);
+
+  if (loading) {
+    return <LoadingExperience />;
+  }
 
   return (
-    <div style={{ minHeight:'100vh', background:T.bg, fontFamily:T.sans, paddingTop:80, position:'relative', overflow:'hidden' }}>
-      {/* ── Ambient background ── */}
-      <AmbientBg />
-
-      {/* ── Structural grid ── */}
+    <div style={{
+      minHeight: '100vh',
+      background: '#0e0c0a',
+      fontFamily: "'DM Sans', sans-serif",
+      paddingTop: '80px',
+    }}>
+      {/* Structural grid */}
       <div style={{
-        position:'fixed', inset:0, pointerEvents:'none', zIndex:1,
-        backgroundImage:'linear-gradient(rgba(200,190,170,0.018) 1px, transparent 1px), linear-gradient(90deg, rgba(200,190,170,0.018) 1px, transparent 1px)',
-        backgroundSize:'88px 88px',
+        position: 'fixed', inset: 0, pointerEvents: 'none', zIndex: 0,
+        backgroundImage: 'linear-gradient(rgba(200,190,170,0.018) 1px, transparent 1px), linear-gradient(90deg, rgba(200,190,170,0.018) 1px, transparent 1px)',
+        backgroundSize: '80px 80px',
       }} />
 
-      <div style={{ position:'relative', zIndex:2, maxWidth:1140, margin:'0 auto', padding:'48px 32px 100px' }}>
+      <div style={{ position: 'relative', zIndex: 1, maxWidth: '1100px', margin: '0 auto', padding: '48px 32px 80px' }}>
 
-        {/* ── TOP BAR ── */}
-        <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:60 }}>
+        {/* Top bar */}
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '56px' }}>
           <motion.button
             onClick={onBackHome}
-            whileHover={{ x:-3, color:'rgba(240,236,228,0.55)' }}
-            transition={{ duration:0.18 }}
-            style={{ background:'none', border:'none', cursor:'pointer', display:'flex', alignItems:'center', gap:10, fontSize:10.5, letterSpacing:'0.2em', textTransform:'uppercase', color:'rgba(240,236,228,0.28)', fontFamily:T.sans, padding:0 }}
+            whileHover={{ x: -2 }}
+            transition={{ duration: 0.18 }}
+            style={{
+              background: 'none', border: 'none', cursor: 'pointer',
+              display: 'flex', alignItems: 'center', gap: '10px',
+              fontSize: '11px', letterSpacing: '0.18em', textTransform: 'uppercase',
+              color: 'rgba(240,236,228,0.35)', fontFamily: "'DM Sans', sans-serif",
+              padding: 0, transition: 'color 0.2s',
+            }}
+            onMouseEnter={e => (e.currentTarget.style.color = 'rgba(240,236,228,0.65)')}
+            onMouseLeave={e => (e.currentTarget.style.color = 'rgba(240,236,228,0.35)')}
           >
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <path d="M19 12H5M12 5l-7 7 7 7"/>
+              <path d="M19 12H5M12 5l-7 7 7 7" />
             </svg>
             Back
           </motion.button>
 
-          <div style={{ display:'flex', alignItems:'center', gap:20, fontSize:10, letterSpacing:'0.22em', color:'rgba(240,236,228,0.22)', fontFamily:T.sans }}>
+          <div style={{
+            display: 'flex', alignItems: 'center', gap: '20px',
+            fontSize: '10px', letterSpacing: '0.2em',
+            color: 'rgba(240,236,228,0.2)',
+          }}>
             <AnimatePresence>
-              {query.length > 0 && (
-                <motion.div initial={{ opacity:0, x:8 }} animate={{ opacity:1, x:0 }} exit={{ opacity:0, x:8 }} transition={{ duration:0.3 }}
-                  style={{ display:'flex', alignItems:'center', gap:8 }}>
-                  <span style={{ fontSize:9, color:'rgba(240,236,228,0.2)' }}>BUDGET DETECTED</span>
-                  <span style={{ fontFamily:T.serif, fontSize:16, fontWeight:500, color:T.gold, letterSpacing:'-0.01em' }}>
-                    ₹{budget.toLocaleString()}
-                  </span>
-                </motion.div>
+              {detectedBudget && (
+                <motion.span
+                  initial={{ opacity: 0, x: 4 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  exit={{ opacity: 0 }}
+                  style={{
+                    color: '#c8a96e',
+                    fontSize: '11px',
+                    letterSpacing: '0.14em',
+                    border: '1px solid rgba(200,169,110,0.2)',
+                    padding: '4px 10px',
+                  }}
+                >
+                  Budget detected: ₹{detectedBudget.toLocaleString()}
+                </motion.span>
               )}
             </AnimatePresence>
-            <div style={{ width:1, height:16, background:'rgba(240,236,228,0.1)' }} />
-            <div style={{ display:'flex', alignItems:'center', gap:7 }}>
-              <span style={{ width:5, height:5, borderRadius:'50%', background:'#8eab96', display:'inline-block', boxShadow:'0 0 6px #8eab9688' }} />
-              <span>OPTICHOICE v1.0</span>
+            <div style={{
+              display: 'flex', alignItems: 'center', gap: '8px',
+            }}>
+              <span style={{
+                width: '5px', height: '5px', borderRadius: '50%',
+                background: '#8eab96', display: 'inline-block',
+                boxShadow: '0 0 6px rgba(142,171,150,0.5)',
+              }} />
+              <span>OPTICHOICE v2.0</span>
             </div>
           </div>
         </div>
 
-        {/* ── TWO-COLUMN GRID ── */}
-        <div style={{ display:'grid', gridTemplateColumns:'1fr 320px', gap:52, alignItems:'start' }} className="df-grid">
-
-          {/* ══════════════════════════════════════
-              LEFT COLUMN — FORM
-          ══════════════════════════════════════ */}
+        <div style={{
+          display: 'grid',
+          gridTemplateColumns: '1fr 300px',
+          gap: '48px',
+          alignItems: 'start',
+        }}
+          className="form-grid"
+        >
+          {/* ── LEFT: Form ── */}
           <motion.form
             onSubmit={handleSubmit}
-            initial={{ opacity:0, y:24 }}
-            animate={{ opacity:1, y:0 }}
-            transition={{ duration:0.7, ease:[0.22,1,0.36,1] }}
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.6, ease: [0.22, 1, 0.36, 1] }}
           >
-
             {/* Header */}
-            <div style={{ marginBottom:48 }}>
-              <div style={{ display:'flex', alignItems:'center', gap:12, marginBottom:22 }}>
-                <div style={{ width:36, height:1, background:T.gold, opacity:0.55 }} />
-                <span style={{ fontSize:9.5, letterSpacing:'0.34em', textTransform:'uppercase', color:T.goldSoft, fontFamily:T.sans }}>Decision Engine</span>
+            <div style={{ marginBottom: '44px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '20px' }}>
+                <div style={{ width: '32px', height: '1px', background: '#c8a96e', opacity: 0.6 }} />
+                <span style={{
+                  fontSize: '9.5px', letterSpacing: '0.3em', textTransform: 'uppercase',
+                  color: 'rgba(200,169,110,0.6)',
+                }}>
+                  Decision Engine · Laptop Optimisation
+                </span>
               </div>
-              <h1 style={{ fontFamily:T.serif, fontSize:'clamp(2.2rem,4.5vw,3.2rem)', fontWeight:500, lineHeight:1.06, letterSpacing:'-0.03em', color:T.cream, marginBottom:14 }}>
-                Tell us what<br/>
-                <motion.span initial={{ opacity:0, x:-10 }} animate={{ opacity:1, x:0 }} transition={{ delay:0.3, duration:0.6, ease:[0.22,1,0.36,1] }}
-                  style={{ color:T.gold, fontStyle:'italic' }}>you need.</motion.span>
+              <h1 style={{
+                fontFamily: "'Cormorant Garamond', Georgia, serif",
+                fontSize: 'clamp(2.2rem, 4vw, 3.2rem)',
+                fontWeight: 500, lineHeight: 1.06,
+                letterSpacing: '-0.03em', color: '#f0ece4',
+                marginBottom: '12px',
+              }}>
+                Describe what<br />
+                <span style={{ color: '#c8a96e', fontStyle: 'italic' }}>you actually need.</span>
               </h1>
-              <p style={{ fontSize:13.5, color:'rgba(240,236,228,0.32)', lineHeight:1.72, letterSpacing:'0.015em', maxWidth:480 }}>
-                Describe your use case in plain language. The engine infers your priorities and ranks every option with full mathematical transparency.
+              <p style={{
+                fontSize: '14px', color: 'rgba(240,236,228,0.4)',
+                lineHeight: 1.7, letterSpacing: '0.01em',
+                maxWidth: '460px',
+              }}>
+                The engine reads intent, infers priority weights, and runs eight optimisation 
+                subsystems to find your mathematically best match.
               </p>
             </div>
 
-            {/* ── PRIMARY QUERY ── */}
-            <div style={{ marginBottom:32 }}>
-              <label style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:14 }}>
-                <span style={{ fontSize:9.5, letterSpacing:'0.28em', textTransform:'uppercase', color:'rgba(240,236,228,0.28)', fontFamily:T.sans }}>
-                  Your Need
-                </span>
-                <span style={{ fontSize:9, letterSpacing:'0.14em', color:'rgba(240,236,228,0.16)', fontFamily:T.sans }}>
-                  Natural language
-                </span>
+            {/* Query input */}
+            <div style={{ marginBottom: '28px' }}>
+              <label style={{
+                display: 'flex', alignItems: 'center', gap: '8px',
+                fontSize: '9.5px', letterSpacing: '0.26em',
+                textTransform: 'uppercase', color: 'rgba(240,236,228,0.35)',
+                marginBottom: '12px',
+              }}>
+                <div style={{ width: '16px', height: '1px', background: 'rgba(200,169,110,0.4)' }} />
+                Your Need
               </label>
-
-              {/* Textarea wrapper with glow border */}
-              <div style={{ position:'relative' }}>
-                <motion.div
-                  animate={{
-                    boxShadow: focused
-                      ? `0 0 0 1px rgba(200,169,110,0.45), 0 8px 40px rgba(200,169,110,0.08), inset 0 1px 0 rgba(200,169,110,0.06)`
-                      : `0 0 0 1px rgba(200,185,155,0.09), 0 4px 16px rgba(0,0,0,0.2)`,
-                  }}
-                  transition={{ duration:0.25 }}
-                  style={{ borderRadius:3, overflow:'hidden' }}
-                >
-                  <textarea
-                    ref={textareaRef}
-                    rows={5}
-                    value={query}
-                    onChange={e => setQuery(e.target.value)}
-                    placeholder={PLACEHOLDERS[pIdx]}
-                    onFocus={() => setFocused(true)}
-                    onBlur={() => setFocused(false)}
-                    style={{
-                      width:'100%', boxSizing:'border-box',
-                      background: focused ? 'rgba(200,169,110,0.025)' : 'rgba(240,236,228,0.025)',
-                      border:'none',
-                      padding:'20px 22px',
-                      fontSize:15.5, lineHeight:1.64,
-                      color:T.cream,
-                      fontFamily:T.sans,
-                      outline:'none',
-                      resize:'vertical',
-                      letterSpacing:'0.01em',
-                      transition:'background 0.25s',
-                    }}
-                  />
-                </motion.div>
-
-                {/* Bottom row inside box */}
-                <div style={{
-                  position:'absolute', bottom:0, left:0, right:0,
-                  display:'flex', justifyContent:'space-between', alignItems:'center',
-                  padding:'8px 16px 10px',
-                  pointerEvents:'none',
-                }}>
-                  <AnimatePresence>
-                    {query.length > 0 && (
-                      <motion.div initial={{ opacity:0 }} animate={{ opacity:1 }} exit={{ opacity:0 }} transition={{ duration:0.2 }}
-                        style={{ display:'flex', alignItems:'center', gap:6 }}>
-                        <span style={{ width:4, height:4, borderRadius:'50%', background:'#8eab96', display:'inline-block' }} />
-                        <span style={{ fontSize:9.5, color:'rgba(140,171,150,0.7)', letterSpacing:'0.1em', fontFamily:T.sans }}>Budget parsed</span>
-                      </motion.div>
-                    )}
-                  </AnimatePresence>
-                  <span style={{ fontSize:9.5, color:'rgba(240,236,228,0.18)', fontFamily:'monospace', letterSpacing:'0.08em' }}>
-                    {query.length} chars
-                  </span>
-                </div>
-              </div>
-            </div>
-
-            {/* ── HARD CONSTRAINTS ── */}
-            <div style={{ marginBottom:36 }}>
-              <label style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:14 }}>
-                <span style={{ fontSize:9.5, letterSpacing:'0.28em', textTransform:'uppercase', color:'rgba(240,236,228,0.28)', fontFamily:T.sans }}>
-                  Hard Constraints
-                </span>
-                <span style={{ fontSize:9, letterSpacing:'0.14em', color:'rgba(240,236,228,0.16)', fontFamily:T.sans }}>
-                  Optional
-                </span>
-              </label>
-              <motion.div
-                animate={{
-                  boxShadow: cFocused
-                    ? `0 0 0 1px rgba(200,169,110,0.32), 0 4px 20px rgba(200,169,110,0.05)`
-                    : `0 0 0 1px rgba(200,185,155,0.08)`,
-                }}
-                transition={{ duration:0.22 }}
-                style={{ borderRadius:3, overflow:'hidden' }}
-              >
+              <div style={{ position: 'relative' }}>
                 <textarea
-                  rows={2}
-                  value={constraints}
-                  onChange={e => setConstraints(e.target.value)}
-                  placeholder="e.g. must be under 1.7 kg, must have 512 GB storage"
-                  onFocus={() => setCFocused(true)}
-                  onBlur={() => setCFocused(false)}
+                  rows={4}
+                  value={query}
+                  onChange={e => setQuery(e.target.value)}
+                  placeholder={PLACEHOLDERS[pIdx]}
+                  onFocus={() => setFocused(true)}
+                  onBlur={() => setFocused(false)}
                   style={{
-                    width:'100%', boxSizing:'border-box',
-                    background:'rgba(240,236,228,0.02)',
-                    border:'none',
-                    padding:'14px 18px',
-                    fontSize:13.5, color:'rgba(240,236,228,0.45)',
-                    fontFamily:T.sans, outline:'none', resize:'none',
-                    letterSpacing:'0.01em', lineHeight:1.6,
-                    transition:'background 0.2s',
+                    width: '100%', boxSizing: 'border-box',
+                    background: focused ? 'rgba(200,169,110,0.025)' : 'rgba(240,236,228,0.025)',
+                    border: focused
+                      ? '1px solid rgba(200,169,110,0.45)'
+                      : '1px solid rgba(200,190,170,0.1)',
+                    borderRadius: '2px',
+                    padding: '18px 20px',
+                    paddingBottom: '36px',
+                    fontSize: '15px', lineHeight: 1.62,
+                    color: '#f0ece4',
+                    fontFamily: "'DM Sans', sans-serif",
+                    outline: 'none',
+                    resize: 'vertical',
+                    transition: 'border-color 0.22s ease, background 0.22s ease',
+                    letterSpacing: '0.01em',
                   }}
                 />
-              </motion.div>
-              <p style={{ fontSize:10, color:'rgba(240,236,228,0.18)', marginTop:8, fontFamily:T.sans, letterSpacing:'0.04em' }}>
-                Hard constraints eliminate options that don't qualify — the engine will not score them.
-              </p>
+                <div style={{
+                  position: 'absolute', bottom: '12px', left: '20px', right: '16px',
+                  display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                  pointerEvents: 'none',
+                }}>
+                  <span style={{
+                    fontSize: '9.5px', color: 'rgba(240,236,228,0.2)',
+                    letterSpacing: '0.1em', fontFamily: 'monospace',
+                  }}>
+                    {query.length > 0 ? `${query.length} chars` : 'plain language · budgets detected automatically'}
+                  </span>
+                  <span style={{
+                    fontSize: '9px', color: 'rgba(240,236,228,0.15)',
+                    letterSpacing: '0.1em', fontFamily: 'monospace',
+                  }}>
+                    {query.length}
+                  </span>
+                </div>
+              </div>
             </div>
 
-            {/* ── FACTOR SLIDERS ── */}
-            <motion.div
-              style={{ border:`1px solid ${T.border}`, borderRadius:3, marginBottom:36, overflow:'hidden', background:`rgba(22,20,15,0.6)` }}
-              animate={{ borderColor: slidersOpen ? 'rgba(200,169,110,0.18)' : T.border }}
-              transition={{ duration:0.3 }}
-            >
-              {/* Header row — clickable toggle */}
-              <button
-                type="button"
-                onClick={() => setSlidersOpen(o => !o)}
+            {/* Constraints */}
+            <div style={{ marginBottom: '32px' }}>
+              <label style={{
+                display: 'flex', alignItems: 'center', gap: '8px',
+                fontSize: '9.5px', letterSpacing: '0.26em',
+                textTransform: 'uppercase', color: 'rgba(240,236,228,0.3)',
+                marginBottom: '12px',
+              }}>
+                <div style={{ width: '16px', height: '1px', background: 'rgba(200,190,170,0.25)' }} />
+                Hard Constraints
+                <span style={{ color: 'rgba(240,236,228,0.18)', fontWeight: 300, letterSpacing: '0.06em', textTransform: 'none', fontSize: '9.5px' }}>
+                  — optional
+                </span>
+              </label>
+              <textarea
+                rows={2}
+                value={constraints}
+                onChange={e => setConstraints(e.target.value)}
+                placeholder="Non-negotiable requirements · e.g. must be under 1.7 kg, must have 512 GB storage"
+                onFocus={() => setConstraintFocused(true)}
+                onBlur={() => setConstraintFocused(false)}
                 style={{
-                  width:'100%', background:'none', border:'none', cursor:'pointer',
-                  padding:'18px 24px',
-                  borderBottom:`1px solid ${T.border}`,
-                  display:'flex', justifyContent:'space-between', alignItems:'center',
+                  width: '100%', boxSizing: 'border-box',
+                  background: constraintFocused ? 'rgba(200,169,110,0.02)' : 'rgba(240,236,228,0.015)',
+                  border: constraintFocused
+                    ? '1px solid rgba(200,169,110,0.35)'
+                    : '1px solid rgba(200,190,170,0.07)',
+                  borderRadius: '2px',
+                  padding: '14px 18px',
+                  fontSize: '13.5px', color: 'rgba(240,236,228,0.55)',
+                  fontFamily: "'DM Sans', sans-serif",
+                  outline: 'none',
+                  resize: 'none',
+                  transition: 'border-color 0.2s, background 0.2s',
+                  letterSpacing: '0.01em',
+                  lineHeight: 1.6,
                 }}
-              >
-                <div style={{ display:'flex', alignItems:'center', gap:12 }}>
-                  <span style={{ fontSize:9.5, letterSpacing:'0.28em', textTransform:'uppercase', color:T.goldSoft, fontFamily:T.sans }}>
-                    Priority Weights
-                  </span>
-                  <span style={{ fontSize:9, color:'rgba(240,236,228,0.18)', fontFamily:T.sans, letterSpacing:'0.06em' }}>
-                    · {Object.keys(factors).length} factors
-                  </span>
-                </div>
-                <div style={{ display:'flex', alignItems:'center', gap:14 }}>
-                  <span style={{ fontSize:9, letterSpacing:'0.14em', color:'rgba(240,236,228,0.18)', fontFamily:T.sans }}>
-                    Drag to tune
-                  </span>
-                  <motion.div animate={{ rotate: slidersOpen ? 180 : 0 }} transition={{ duration:0.25 }}>
-                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="rgba(240,236,228,0.25)" strokeWidth="2">
-                      <path d="M6 9l6 6 6-6"/>
-                    </svg>
-                  </motion.div>
-                </div>
-              </button>
+              />
+            </div>
 
-              <AnimatePresence initial={false}>
-                {slidersOpen && (
-                  <motion.div
-                    initial={{ height:0, opacity:0 }}
-                    animate={{ height:'auto', opacity:1 }}
-                    exit={{ height:0, opacity:0 }}
-                    transition={{ duration:0.35, ease:[0.22,1,0.36,1] }}
-                    style={{ overflow:'hidden' }}
-                  >
-                    <div style={{ padding:'28px 24px 24px', display:'grid', gridTemplateColumns:'1fr 1fr', gap:'28px 48px' }} className="df-sliders">
-                      {Object.entries(factors).map(([factor, value]) => (
-                        <FactorSlider
-                          key={factor}
-                          factor={factor}
-                          value={value}
-                          onChange={handleSlider}
-                        />
-                      ))}
-                    </div>
-                  </motion.div>
-                )}
-              </AnimatePresence>
-            </motion.div>
+            {/* Factor sliders */}
+            <div style={{
+              border: '1px solid rgba(200,190,170,0.08)',
+              borderRadius: '2px',
+              marginBottom: '32px',
+              overflow: 'hidden',
+            }}>
+              <div style={{
+                padding: '16px 20px',
+                borderBottom: '1px solid rgba(200,190,170,0.06)',
+                display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                background: 'rgba(200,169,110,0.02)',
+              }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="rgba(200,169,110,0.5)" strokeWidth="2">
+                    <path d="M12 20V10M18 20V4M6 20v-4"/>
+                  </svg>
+                  <p style={{
+                    fontSize: '9.5px', letterSpacing: '0.26em', textTransform: 'uppercase',
+                    color: 'rgba(240,236,228,0.38)',
+                  }}>
+                    Manual Priority Weights
+                  </p>
+                </div>
+                <span style={{
+                  fontSize: '9.5px', letterSpacing: '0.12em',
+                  color: 'rgba(240,236,228,0.2)',
+                }}>
+                  engine will infer automatically if unchanged
+                </span>
+              </div>
+              <div style={{
+                padding: '22px',
+                display: 'grid', gridTemplateColumns: '1fr 1fr',
+                gap: '4px 36px',
+              }}>
+                {Object.entries(factors).map(([factor, value]) => (
+                  <FactorBar key={factor} factor={factor} value={value} onChange={handleSlider} />
+                ))}
+              </div>
+            </div>
 
-            {/* ── ERROR ── */}
+            {/* Error */}
             <AnimatePresence>
               {error && (
                 <motion.div
-                  initial={{ opacity:0, y:-6 }} animate={{ opacity:1, y:0 }} exit={{ opacity:0 }}
+                  initial={{ opacity: 0, y: -6 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0 }}
                   style={{
-                    border:'1px solid rgba(180,100,90,0.28)',
-                    background:'rgba(180,100,90,0.05)',
-                    borderRadius:3, padding:'13px 18px',
-                    fontSize:12.5, color:'#c08888',
-                    marginBottom:22, letterSpacing:'0.04em',
-                    fontFamily:T.sans, lineHeight:1.6,
+                    border: '1px solid rgba(180,100,90,0.3)',
+                    background: 'rgba(180,100,90,0.05)',
+                    borderRadius: '2px',
+                    padding: '12px 16px',
+                    fontSize: '13px', color: '#c08888',
+                    marginBottom: '20px',
+                    letterSpacing: '0.04em',
+                    display: 'flex', alignItems: 'center', gap: '10px',
                   }}
                 >
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>
+                  </svg>
                   {error}
                 </motion.div>
               )}
             </AnimatePresence>
 
-            {/* ── SUBMIT ── */}
+            {/* Submit */}
             <motion.button
               type="submit"
-              disabled={loading}
-              whileHover={!loading ? { scale:1.015, boxShadow:'0 12px 48px rgba(200,169,110,0.28)', letterSpacing:'0.22em' } : {}}
-              whileTap={!loading ? { scale:0.985 } : {}}
+              whileHover={{ scale: 1.01 }}
+              whileTap={{ scale: 0.99 }}
               style={{
-                width:'100%', padding:'19px',
-                background: loading ? 'rgba(200,169,110,0.07)' : T.gold,
-                border: loading ? `1px solid rgba(200,169,110,0.2)` : 'none',
-                borderRadius:3,
-                color: loading ? 'rgba(200,169,110,0.38)' : T.bg,
-                fontSize:11, letterSpacing:'0.26em', textTransform:'uppercase',
-                fontFamily:T.sans, fontWeight:600,
-                cursor: loading ? 'not-allowed' : 'pointer',
-                transition:'all 0.3s cubic-bezier(0.22,1,0.36,1)',
-                display:'flex', alignItems:'center', justifyContent:'center', gap:14,
-                boxShadow: loading ? 'none' : '0 8px 32px rgba(200,169,110,0.18)',
+                width: '100%',
+                padding: '20px',
+                background: '#c8a96e',
+                border: 'none',
+                borderRadius: '2px',
+                color: '#0e0c0a',
+                fontSize: '11px', letterSpacing: '0.26em', textTransform: 'uppercase',
+                fontFamily: "'DM Sans', sans-serif", fontWeight: 700,
+                cursor: 'pointer',
+                transition: 'all 0.28s cubic-bezier(0.22,1,0.36,1)',
+                display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '12px',
+                boxShadow: '0 8px 32px rgba(200,169,110,0.15)',
               }}
             >
-              {loading ? (
-                <>
-                  <motion.span animate={{ rotate:360 }} transition={{ repeat:Infinity, duration:1.2, ease:'linear' }}
-                    style={{ display:'inline-block', fontSize:15, lineHeight:1 }}>
-                    ◌
-                  </motion.span>
-                  Analysing your priorities
-                </>
-              ) : (
-                <>
-                  Find My Best Option
-                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-                    <path d="M5 12h14M12 5l7 7-7 7"/>
-                  </svg>
-                </>
-              )}
+              Run Optimisation Engine
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                <path d="M5 12h14M12 5l7 7-7 7" />
+              </svg>
             </motion.button>
 
-            {/* ── Loading state overlay hint ── */}
-            <AnimatePresence>
-              {loading && (
-                <motion.div initial={{ opacity:0, y:6 }} animate={{ opacity:1, y:0 }} exit={{ opacity:0 }} transition={{ delay:0.3 }}
-                  style={{ textAlign:'center', marginTop:16 }}>
-                  <p style={{ fontSize:10, color:'rgba(240,236,228,0.22)', letterSpacing:'0.2em', textTransform:'uppercase', fontFamily:T.sans }}>
-                    Running optimisation engine
-                  </p>
-                  {/* Shimmer bar */}
-                  <div style={{ height:1, background:'rgba(200,169,110,0.08)', borderRadius:1, marginTop:10, overflow:'hidden', position:'relative' }}>
-                    <motion.div
-                      animate={{ x:['-100%','200%'] }}
-                      transition={{ repeat:Infinity, duration:1.6, ease:'easeInOut' }}
-                      style={{ position:'absolute', top:0, left:0, width:'40%', height:'100%', background:'linear-gradient(90deg, transparent, rgba(200,169,110,0.45), transparent)' }}
-                    />
-                  </div>
-                </motion.div>
-              )}
-            </AnimatePresence>
+            {/* Sub-note */}
+            <p style={{
+              marginTop: '14px',
+              textAlign: 'center',
+              fontSize: '10px',
+              color: 'rgba(240,236,228,0.2)',
+              letterSpacing: '0.1em',
+            }}>
+              TOPSIS · Pareto · Regret · Sensitivity · {PRODUCTS.length} products evaluated
+            </p>
           </motion.form>
 
-          {/* ══════════════════════════════════════
-              RIGHT COLUMN — WEIGHT ANALYSIS PANEL
-          ══════════════════════════════════════ */}
+          {/* ── RIGHT: Live weight panel ── */}
           <motion.div
-            initial={{ opacity:0, x:20 }}
-            animate={{ opacity:1, x:0 }}
-            transition={{ duration:0.7, delay:0.22, ease:[0.22,1,0.36,1] }}
-            style={{ position:'sticky', top:96 }}
+            initial={{ opacity: 0, x: 16 }}
+            animate={{ opacity: 1, x: 0 }}
+            transition={{ duration: 0.6, delay: 0.18, ease: [0.22, 1, 0.36, 1] }}
+            style={{
+              position: 'sticky',
+              top: '96px',
+            }}
           >
-            {/* Panel card */}
+            {/* Weight Analysis */}
             <div style={{
-              border:`1px solid ${T.border}`,
-              borderRadius:3, overflow:'hidden',
-              background:'rgba(22,20,15,0.7)',
-              backdropFilter:'blur(20px)',
-              boxShadow:'0 16px 48px rgba(0,0,0,0.35)',
+              border: '1px solid rgba(200,190,170,0.1)',
+              borderRadius: '2px',
+              padding: '24px',
+              marginBottom: '2px',
             }}>
-              {/* Panel header */}
-              <div style={{ padding:'20px 22px 16px', borderBottom:`1px solid ${T.border}`, display:'flex', justifyContent:'space-between', alignItems:'center' }}>
-                <span style={{ fontSize:9.5, letterSpacing:'0.28em', textTransform:'uppercase', color:T.goldSoft, fontFamily:T.sans }}>
-                  Weight Analysis
-                </span>
-                <span style={{
-                  fontSize:10, fontFamily:'monospace',
-                  color: totalWeight > 1.01 ? '#c08888' : '#8eab96',
-                  letterSpacing:'0.06em',
-                }}>
-                  Σ {totalWeight.toFixed(2)}
-                </span>
-              </div>
+              <p style={{
+                fontSize: '9.5px', letterSpacing: '0.26em', textTransform: 'uppercase',
+                color: 'rgba(200,169,110,0.55)', marginBottom: '22px',
+              }}>
+                Weight Distribution
+              </p>
 
-              <div style={{ padding:'24px 22px' }}>
-                {/* Donut ring */}
-                <WeightRing factors={factors} />
-
-                {/* Ranked list */}
-                <div style={{ marginBottom:20 }}>
-                  {sortedFactors.map(([factor, value], i) => {
+              <div style={{ marginBottom: '20px' }}>
+                {Object.entries(factors)
+                  .sort((a, b) => b[1] - a[1])
+                  .map(([factor, value]) => {
                     const meta = FACTOR_META[factor];
-                    const total = Object.values(factors).reduce((a,b)=>a+b,0) || 1;
-                    const normPct = (value / total) * 100;
                     return (
-                      <motion.div key={factor} layout style={{ marginBottom:13 }}>
-                        <div style={{ display:'flex', justifyContent:'space-between', marginBottom:5 }}>
-                          <div style={{ display:'flex', alignItems:'center', gap:7 }}>
-                            {i === 0 && (
-                              <span style={{ fontSize:7.5, letterSpacing:'0.14em', color:T.gold, border:`1px solid rgba(200,169,110,0.35)`, borderRadius:2, padding:'1px 4px', fontFamily:T.sans, lineHeight:1.5 }}>TOP</span>
-                            )}
-                            <span style={{ fontSize:10.5, letterSpacing:'0.06em', color:meta.color, fontFamily:T.sans, fontWeight:500, textTransform:'uppercase', fontSize:10 }}>
-                              {meta.label}
-                            </span>
-                          </div>
-                          <span style={{ fontSize:10, color:'rgba(240,236,228,0.3)', fontFamily:'monospace' }}>
-                            {Math.round(normPct)}%
+                      <div key={factor} style={{ marginBottom: '13px' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '5px' }}>
+                          <span style={{
+                            fontSize: '10px', letterSpacing: '0.16em',
+                            color: meta.color, textTransform: 'uppercase',
+                          }}>
+                            {meta.abbr}
+                          </span>
+                          <span style={{ fontSize: '10px', color: 'rgba(240,236,228,0.32)', fontFamily: 'monospace' }}>
+                            {Math.round(value * 100)}%
                           </span>
                         </div>
-                        <div style={{ height:1.5, background:'rgba(240,236,228,0.05)', borderRadius:1, overflow:'hidden' }}>
+                        <div style={{ height: '1px', background: 'rgba(240,236,228,0.05)', position: 'relative' }}>
                           <motion.div
-                            animate={{ width:`${normPct}%` }}
-                            transition={{ duration:0.25 }}
-                            style={{ height:'100%', background:meta.color, opacity:0.7, borderRadius:1 }}
+                            animate={{ width: `${value * 100}%` }}
+                            transition={{ duration: 0.18 }}
+                            style={{ position: 'absolute', left: 0, top: 0, height: '100%', background: meta.color }}
                           />
                         </div>
-                      </motion.div>
+                      </div>
                     );
                   })}
-                </div>
-
-                {/* Normalisation notice */}
-                <AnimatePresence>
-                  {totalWeight > 1.01 && (
-                    <motion.div initial={{ opacity:0, y:4 }} animate={{ opacity:1, y:0 }} exit={{ opacity:0 }}
-                      style={{ padding:'10px 12px', background:'rgba(180,100,90,0.06)', border:'1px solid rgba(180,100,90,0.2)', borderRadius:2, marginBottom:16 }}>
-                      <p style={{ fontSize:10, color:'rgba(192,136,136,0.85)', letterSpacing:'0.06em', fontFamily:T.sans, lineHeight:1.6 }}>
-                        Weights exceed 1.0 — the engine will normalise before ranking.
-                      </p>
-                    </motion.div>
-                  )}
-                </AnimatePresence>
-
-                {/* Pipeline hint */}
-                <div style={{ padding:'14px 16px', background:'rgba(240,236,228,0.018)', borderLeft:`2px solid rgba(200,169,110,0.22)`, borderRadius:'0 2px 2px 0' }}>
-                  <p style={{ fontSize:10, color:'rgba(240,236,228,0.26)', lineHeight:1.75, letterSpacing:'0.04em', fontFamily:T.sans }}>
-                    Prompt → intent extraction → weight mapping → TOPSIS + regret optimisation → ranked results.
-                  </p>
-                </div>
-
-                {/* Products being evaluated */}
-                <div style={{ marginTop:20, paddingTop:16, borderTop:`1px solid ${T.border}` }}>
-                  <p style={{ fontSize:9, letterSpacing:'0.22em', textTransform:'uppercase', color:'rgba(240,236,228,0.2)', fontFamily:T.sans, marginBottom:10 }}>
-                    Products in scope
-                  </p>
-                  {PRODUCTS.map(p => (
-                    <div key={p.id} style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:7, padding:'5px 0', borderBottom:`1px solid rgba(200,185,155,0.04)` }}>
-                      <span style={{ fontSize:10.5, color:'rgba(240,236,228,0.3)', fontFamily:T.sans }}>{p.name}</span>
-                      <span style={{ fontSize:9.5, color:T.goldSoft, fontFamily:'monospace', letterSpacing:'0.04em' }}>₹{p.price.toLocaleString()}</span>
-                    </div>
-                  ))}
-                </div>
               </div>
+
+              <div style={{ borderTop: '1px solid rgba(200,190,170,0.07)', paddingTop: '14px' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <span style={{ fontSize: '9.5px', letterSpacing: '0.18em', color: 'rgba(240,236,228,0.22)', textTransform: 'uppercase' }}>
+                    Sum
+                  </span>
+                  <span style={{
+                    fontSize: '12px', fontFamily: 'monospace',
+                    color: totalWeight > 1.01 ? '#c08888' : '#8eab96',
+                  }}>
+                    {totalWeight.toFixed(2)}
+                  </span>
+                </div>
+                {totalWeight > 1.01 && (
+                  <p style={{ fontSize: '10.5px', color: 'rgba(192,136,136,0.7)', letterSpacing: '0.06em', marginTop: '8px', lineHeight: 1.5 }}>
+                    Exceeds 1.0 — engine normalises automatically.
+                  </p>
+                )}
+              </div>
+            </div>
+
+            {/* Engine info card */}
+            <div style={{
+              border: '1px solid rgba(200,190,170,0.07)',
+              padding: '20px',
+              background: 'rgba(200,169,110,0.02)',
+            }}>
+              <p style={{
+                fontSize: '9px', letterSpacing: '0.26em', textTransform: 'uppercase',
+                color: 'rgba(200,169,110,0.4)', marginBottom: '14px',
+              }}>
+                Pipeline
+              </p>
+              {[
+                'Semantic inference',
+                'Utility curves',
+                'Interaction effects',
+                'Pareto dominance',
+                'TOPSIS distance',
+                'Regret scoring',
+                'Sensitivity analysis',
+              ].map((step, i) => (
+                <div key={step} style={{
+                  display: 'flex', alignItems: 'center', gap: '10px',
+                  padding: '7px 0',
+                  borderBottom: i < 6 ? '1px solid rgba(200,190,170,0.04)' : 'none',
+                }}>
+                  <span style={{
+                    fontFamily: 'monospace', fontSize: '9px',
+                    color: 'rgba(200,169,110,0.35)',
+                    minWidth: '18px',
+                  }}>
+                    {String(i + 1).padStart(2, '0')}
+                  </span>
+                  <span style={{
+                    fontSize: '11px', color: 'rgba(240,236,228,0.32)',
+                    letterSpacing: '0.04em',
+                  }}>
+                    {step}
+                  </span>
+                </div>
+              ))}
             </div>
           </motion.div>
         </div>
       </div>
 
       <style>{`
-        @media(max-width:860px){
-          .df-grid{grid-template-columns:1fr!important;}
-          .df-sliders{grid-template-columns:1fr!important;}
-        }
-        @media(max-width:540px){
-          .df-sliders{grid-template-columns:1fr!important;}
-        }
-        textarea{
-          color-scheme:dark;
-        }
-        textarea::placeholder{
-          color:rgba(240,236,228,0.18);
-        }
-        input[type=range]{
-          -webkit-appearance:none;
-          appearance:none;
-          background:transparent;
-        }
-        input[type=range]::-webkit-slider-thumb{
-          -webkit-appearance:none;
-          width:1px; height:1px; opacity:0;
-        }
-        input[type=range]::-moz-range-thumb{
-          width:1px; height:1px; opacity:0; border:none;
+        @media (max-width: 768px) {
+          .form-grid { grid-template-columns: 1fr !important; }
         }
       `}</style>
     </div>
