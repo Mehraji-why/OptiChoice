@@ -377,3 +377,81 @@ input[type="range"]::-webkit-slider-runnable-track {
     grid-template-columns: 1fr !important;
   }
 }
+/* ─────────────────────────────────────────────────────────────────────────────
+   globals.css PATCH — OptiChoice Optimization Design Tokens
+   Add this block to your existing globals.css :root { } block.
+   ───────────────────────────────────────────────────────────────────────────── */
+
+:root {
+  /* ── Optimization Semantic Colors ── */
+
+  /* Optimal / best match */
+  --oc-optimal:           #8eab96;
+  --oc-optimal-dim:       rgba(142,171,150,0.12);
+  --oc-optimal-border:    rgba(142,171,150,0.25);
+
+  /* Excellent */
+  --oc-excellent:         #a8b89c;
+  --oc-excellent-dim:     rgba(168,184,156,0.08);
+  --oc-excellent-border:  rgba(168,184,156,0.22);
+
+  /* Tradeoff / gold accent (existing) */
+  --oc-tradeoff:          #c8a96e;
+  --oc-tradeoff-dim:      rgba(200,169,110,0.08);
+  --oc-tradeoff-border:   rgba(200,169,110,0.22);
+
+  /* Strong option */
+  --oc-strong:            #b8b098;
+  --oc-strong-dim:        rgba(184,176,152,0.07);
+
+  /* Compromise */
+  --oc-compromise:        #b8a898;
+  --oc-compromise-dim:    rgba(184,168,152,0.07);
+  --oc-compromise-border: rgba(184,168,152,0.20);
+
+  /* Penalty — honest but calm, not alarming red */
+  --oc-penalty:           #b8a090;
+  --oc-penalty-dim:       rgba(184,160,144,0.10);
+  --oc-penalty-border:    rgba(184,160,144,0.20);
+
+  /* Equivalence — slate blue-gray */
+  --oc-equivalent:        #9eaab8;
+  --oc-equivalent-dim:    rgba(158,170,184,0.10);
+  --oc-equivalent-border: rgba(158,170,184,0.25);
+
+  /* Sensitivity / opportunity */
+  --oc-sensitivity:       rgba(200,169,110,0.55);
+  --oc-sensitivity-bg:    rgba(200,169,110,0.03);
+  --oc-sensitivity-border:rgba(200,169,110,0.15);
+}
+
+/* ── Card Elevation System ── */
+
+/* Standard card (rank #3+) */
+.oc-card-standard {
+  background: rgba(14,12,10,0.95);
+  border: 1px solid rgba(200,190,170,0.10);
+  box-shadow: 0 4px 24px rgba(0,0,0,0.25);
+}
+
+/* Top card (rank #1, non-equivalent) */
+.oc-card-top {
+  background: rgba(18,16,13,0.98);
+  border: 1px solid rgba(200,190,170,0.18);
+  box-shadow: 0 8px 40px rgba(0,0,0,0.35), 0 0 0 1px rgba(200,169,110,0.06);
+}
+
+/* Equivalent cards — same elevation, equal visual weight */
+.oc-card-equivalent {
+  background: rgba(14,12,10,0.95);
+  border: 1px solid rgba(200,190,170,0.10);
+  border-left: 2px solid rgba(158,170,184,0.25);
+  box-shadow: 0 4px 24px rgba(0,0,0,0.25);
+}
+
+/* ── SensitivityPanel responsive ── */
+@media (max-width: 768px) {
+  .sensitivity-cards {
+    flex-direction: column !important;
+  }
+}
