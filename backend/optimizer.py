@@ -549,8 +549,10 @@ def compute_utility(
     )
 
     # Final utility
-    if preference.strict_budget and normalized.price >
-    preference.hard_constraints.get("budget", float("inf")):
+    if (
+        preference.strict_budget 
+        and normalized.price > preference.hard_constraints.get("budget", float("inf"))
+    ):
         final_utility = 0.0
     else:
         final_utility = raw_utility - b_penalty - imb_penalty
