@@ -96,6 +96,7 @@ The JSON must have exactly this structure:
   }},
   "tradeoff_tolerance": 0.0_to_1.0,
   "budget_sensitivity": 0.0_to_1.0,
+  "strict_budget": true,
   "future_proofing_intent": true_or_false,
   "use_case_tags": ["tag1", "tag2"],
   "inference_confidence": 0.0_to_1.0,
@@ -160,6 +161,10 @@ hard_constraints handles budget and numeric physical limits:
    - "around ₹X", "roughly", "approximately" → 0.65
    - "flexible", "willing to stretch", "if needed" → 0.30
    - No qualifier → 0.75 (default firm)
+   - true if user says:
+     "strictly under", "cannot exceed", "hard limit", "max", "under no circumstances"
+   - false if user says:
+     "around", "approximately", "can stretch", "flexible"
 6. inference_confidence: 1.0 = user was very clear, 0.0 = highly ambiguous.
 7. use_case_tags: from [student, gaming, creator, travel, professional, general].
 8. inference_notes: explain what categorical constraints you extracted and why,

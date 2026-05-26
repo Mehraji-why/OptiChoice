@@ -117,6 +117,10 @@ class PreferenceModel(BaseModel):
         ge=0.0, le=1.0,
         description="How painful is going over budget? 0=flexible, 1=hard limit"
     )
+    strict_budget: bool = Field(
+        default=False,
+        description="If True, products above budget are completely excluded."
+    )
     future_proofing_intent: bool = Field(
         default=False,
         description="Does user care about longevity over current value?"
@@ -134,7 +138,7 @@ class PreferenceModel(BaseModel):
         default=None,
         description="Gemini's reasoning about what it inferred and why"
     )
-
+    
 
 # ─────────────────────────────────────────────
 # LAYER 2 INTERMEDIATE ARTIFACTS

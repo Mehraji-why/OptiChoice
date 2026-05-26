@@ -417,6 +417,7 @@ def budget_penalty(
     price: float,
     budget: float,
     sensitivity: float,
+    strict_budget: bool = False,
     lambda_scale: float = 1.0,
 ) -> Tuple[float, float]:
     """
@@ -442,6 +443,9 @@ def budget_penalty(
     """
     if price <= budget:
         return 0.0, 0.0
+    # True hard budget enforcement
+    if strict_budget and price > budget:
+        return 1.0, round(((price - budget) / budget) * 100, 2)
 
     overage_fraction = (price - budget) / budget
     overage_pct = round(overage_fraction * 100, 2)
@@ -531,6 +535,7 @@ def compute_utility(
         normalized.price,
         preference.hard_constraints.get("budget", float("inf")),
         preference.budget_sensitivity,
+        preference.strict_budget,
         profile.budget_penalty_lambda,
     )
     within_budget = overage_pct == 0.0
@@ -544,8 +549,12 @@ def compute_utility(
     )
 
     # Final utility
-    final_utility = raw_utility - b_penalty - imb_penalty
-    final_utility = max(0.0, min(1.0, final_utility))
+    if preference.strict_budget and normalized.price >
+    preference.hard_constraints.get("budget", float("inf")):
+        final_utility = 0.0
+    else:
+        final_utility = raw_utility - b_penalty - imb_penalty
+        final_utility = max(0.0, min(1.0, final_utility))
 
     # Constraint violations
     violations = []
