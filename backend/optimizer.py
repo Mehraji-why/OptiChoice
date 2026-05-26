@@ -34,6 +34,8 @@ from typing import Any, Dict, List, Optional, Tuple
 
 from models import (
     AnalysisResult,
+    HardConstraint,
+    HardConstraintResult,
     InteractionEvent,
     NormalizedProduct,
     ParetoArtifact,
@@ -47,6 +49,245 @@ from models import (
     UtilityArtifact,
 )
 from profiles.base_profile import BaseProfile
+
+
+# ═══════════════════════════════════════════════
+# 2a-PRE. HARD CATEGORICAL CONSTRAINT ENFORCEMENT
+#
+# Runs BEFORE normalization. Products that violate hard constraints
+# are either disqualified (penalty=0.0) or heavily penalized before
+# any utility scoring begins.
+#
+# This is separate from the budget penalty model because:
+#   - Budget is continuous and has a two-tier model
+#   - Categorical constraints are binary (matches or doesn't)
+#   - The enforcement logic differs fundamentally
+#
+# A disqualified product still flows through the pipeline with a
+# score of 0.0 — it appears in debug artifacts and can surface in
+# the UI with a "does not meet your requirements" label, rather than
+# disappearing silently.
+# ═══════════════════════════════════════════════
+
+def _normalize_string(v: Any) -> str:
+    """Lowercase + strip for case-insensitive catalog field matching."""
+    return str(v).lower().strip()
+
+
+def _eval_constraint(
+    product: Dict[str, Any],
+    constraint: HardConstraint,
+) -> HardConstraintResult:
+    """
+    Evaluate a single HardConstraint against a single product.
+
+    Returns a HardConstraintResult with:
+      - passed: whether the product satisfies the constraint
+      - penalty_applied: score multiplier (1.0 = no penalty, 0.0 = disqualified)
+      - disqualified: True when penalty_applied == 0.0
+      - reason: human-readable explanation
+
+    Missing field behavior:
+      If the product catalog doesn't have the required field, we treat it as
+      an unknown rather than a violation — the product is not penalized but
+      is flagged. This prevents good products from being eliminated due to
+      incomplete catalog data.
+    """
+    product_id = str(product.get("id", product.get("name", "unknown")))
+    field = constraint.field
+    mt = constraint.match_type
+    actual = product.get(field)
+
+    # ── Missing field: flag but do not penalize ──
+    if actual is None:
+        return HardConstraintResult(
+            product_id=product_id,
+            constraint_field=field,
+            match_type=mt,
+            required=constraint.value or constraint.values,
+            actual=None,
+            passed=False,
+            penalty_applied=0.5,  # moderate penalty, not disqualification
+            disqualified=False,
+            source=constraint.source,
+            reason=f"Field '{field}' not present in catalog — cannot verify constraint. Moderate penalty applied.",
+        )
+
+    # ── EXACT match ──
+    if mt == "exact":
+        required = constraint.value
+        passed = _normalize_string(actual) == _normalize_string(required)
+        if passed:
+            return HardConstraintResult(
+                product_id=product_id, constraint_field=field, match_type=mt,
+                required=required, actual=actual, passed=True,
+                penalty_applied=1.0, disqualified=False, source=constraint.source,
+                reason=f"'{field}' = '{actual}' matches required '{required}'.",
+            )
+        return HardConstraintResult(
+            product_id=product_id, constraint_field=field, match_type=mt,
+            required=required, actual=actual, passed=False,
+            penalty_applied=constraint.violation_penalty, disqualified=constraint.violation_penalty == 0.0,
+            source=constraint.source,
+            reason=f"'{field}' = '{actual}' does not match required '{required}'.",
+        )
+
+    # ── ONE_OF match ──
+    if mt == "one_of":
+        required_values = [_normalize_string(v) for v in (constraint.values or [])]
+        passed = _normalize_string(actual) in required_values
+        if passed:
+            return HardConstraintResult(
+                product_id=product_id, constraint_field=field, match_type=mt,
+                required=constraint.values, actual=actual, passed=True,
+                penalty_applied=1.0, disqualified=False, source=constraint.source,
+                reason=f"'{field}' = '{actual}' is in required set {constraint.values}.",
+            )
+        return HardConstraintResult(
+            product_id=product_id, constraint_field=field, match_type=mt,
+            required=constraint.values, actual=actual, passed=False,
+            penalty_applied=constraint.violation_penalty, disqualified=constraint.violation_penalty == 0.0,
+            source=constraint.source,
+            reason=f"'{field}' = '{actual}' is not in required set {constraint.values}.",
+        )
+
+    # ── MINIMUM (numeric) ──
+    if mt == "minimum":
+        try:
+            actual_num = float(actual)
+            required_num = float(constraint.value)
+        except (TypeError, ValueError):
+            return HardConstraintResult(
+                product_id=product_id, constraint_field=field, match_type=mt,
+                required=constraint.value, actual=actual, passed=False,
+                penalty_applied=0.5, disqualified=False, source=constraint.source,
+                reason=f"Cannot compare '{field}': actual='{actual}' or required='{constraint.value}' is not numeric.",
+            )
+        passed = actual_num >= required_num
+        if passed:
+            return HardConstraintResult(
+                product_id=product_id, constraint_field=field, match_type=mt,
+                required=required_num, actual=actual_num, passed=True,
+                penalty_applied=1.0, disqualified=False, source=constraint.source,
+                reason=f"'{field}' = {actual_num} meets minimum {required_num}.",
+            )
+        # Proportional penalty: severe shortfall = heavy penalty
+        ratio = actual_num / required_num if required_num > 0 else 0.0
+        proportional_penalty = max(constraint.violation_penalty, ratio ** 2)
+        # If violation_penalty is 0.0 (hard), disqualify regardless of ratio
+        final_penalty = 0.0 if constraint.violation_penalty == 0.0 else proportional_penalty
+        return HardConstraintResult(
+            product_id=product_id, constraint_field=field, match_type=mt,
+            required=required_num, actual=actual_num, passed=False,
+            penalty_applied=final_penalty,
+            disqualified=final_penalty == 0.0,
+            source=constraint.source,
+            reason=f"'{field}' = {actual_num} is below minimum {required_num} (shortfall: {required_num - actual_num:.1f}).",
+        )
+
+    # ── MAXIMUM (numeric) ──
+    if mt == "maximum":
+        try:
+            actual_num = float(actual)
+            required_num = float(constraint.value)
+        except (TypeError, ValueError):
+            return HardConstraintResult(
+                product_id=product_id, constraint_field=field, match_type=mt,
+                required=constraint.value, actual=actual, passed=False,
+                penalty_applied=0.5, disqualified=False, source=constraint.source,
+                reason=f"Cannot compare '{field}': non-numeric value.",
+            )
+        passed = actual_num <= required_num
+        if passed:
+            return HardConstraintResult(
+                product_id=product_id, constraint_field=field, match_type=mt,
+                required=required_num, actual=actual_num, passed=True,
+                penalty_applied=1.0, disqualified=False, source=constraint.source,
+                reason=f"'{field}' = {actual_num} is within maximum {required_num}.",
+            )
+        ratio = required_num / actual_num if actual_num > 0 else 0.0
+        final_penalty = 0.0 if constraint.violation_penalty == 0.0 else max(constraint.violation_penalty, ratio ** 2)
+        return HardConstraintResult(
+            product_id=product_id, constraint_field=field, match_type=mt,
+            required=required_num, actual=actual_num, passed=False,
+            penalty_applied=final_penalty,
+            disqualified=final_penalty == 0.0,
+            source=constraint.source,
+            reason=f"'{field}' = {actual_num} exceeds maximum {required_num} (excess: {actual_num - required_num:.2f}).",
+        )
+
+    # ── EXCLUDES ──
+    if mt == "excludes":
+        excluded = [_normalize_string(v) for v in (constraint.values or ([constraint.value] if constraint.value else []))]
+        passed = _normalize_string(actual) not in excluded
+        if passed:
+            return HardConstraintResult(
+                product_id=product_id, constraint_field=field, match_type=mt,
+                required=f"not in {excluded}", actual=actual, passed=True,
+                penalty_applied=1.0, disqualified=False, source=constraint.source,
+                reason=f"'{field}' = '{actual}' is not in excluded set.",
+            )
+        return HardConstraintResult(
+            product_id=product_id, constraint_field=field, match_type=mt,
+            required=f"not in {excluded}", actual=actual, passed=False,
+            penalty_applied=constraint.violation_penalty, disqualified=constraint.violation_penalty == 0.0,
+            source=constraint.source,
+            reason=f"'{field}' = '{actual}' is explicitly excluded by user requirement.",
+        )
+
+    # ── Unknown match_type — warn but don't penalize ──
+    return HardConstraintResult(
+        product_id=product_id, constraint_field=field, match_type=mt,
+        required=constraint.value, actual=actual, passed=True,
+        penalty_applied=1.0, disqualified=False, source=constraint.source,
+        reason=f"Unknown match_type '{mt}' — constraint not enforced.",
+    )
+
+
+def apply_hard_constraints(
+    products: List[Dict[str, Any]],
+    preference: PreferenceModel,
+) -> Tuple[Dict[str, float], Dict[str, List[HardConstraintResult]]]:
+    """
+    Evaluate all categorical constraints against all products.
+
+    Returns:
+      constraint_multipliers: Dict[product_id → combined score multiplier]
+        1.0 = no violations
+        0.0 = disqualified (at least one hard violation)
+        0.x = partial penalties combined multiplicatively
+
+      all_results: Dict[product_id → List[HardConstraintResult]]
+        Full evaluation trace for every product/constraint pair.
+
+    Combination logic:
+      Penalties from multiple constraints multiply together.
+      One 0.0 penalty anywhere → product multiplier = 0.0 (disqualified).
+      This is correct: "must be Intel AND must have 16GB RAM" — failing either is fatal.
+    """
+    constraints = preference.categorical_constraints
+    if not constraints:
+        product_ids = [str(p.get("id", p.get("name", "unknown"))) for p in products]
+        return {pid: 1.0 for pid in product_ids}, {}
+
+    multipliers: Dict[str, float] = {}
+    all_results: Dict[str, List[HardConstraintResult]] = {}
+
+    for product in products:
+        pid = str(product.get("id", product.get("name", "unknown")))
+        results = [_eval_constraint(product, c) for c in constraints]
+        all_results[pid] = results
+
+        # Multiply all penalties together
+        combined = 1.0
+        for r in results:
+            combined *= r.penalty_applied
+            if combined == 0.0:
+                break  # Short-circuit: already disqualified
+
+        multipliers[pid] = round(combined, 6)
+
+    return multipliers, all_results
 
 
 # ═══════════════════════════════════════════════
@@ -145,9 +386,32 @@ def apply_interactions(
 
 # ═══════════════════════════════════════════════
 # 2c. BUDGET FEASIBILITY MODEL
-# Continuous quadratic penalty — not a hard filter.
-# Products slightly over budget survive; far over get crushed.
+# Two-tier enforcement model.
+#
+# Tier 1 — Hard elimination (sensitivity >= HARD_BUDGET_THRESHOLD):
+#   Products beyond the stretch ceiling are scored 0.0 and cannot rank.
+#   This is the correct behavior when the user says "under ₹70k" or "strict budget."
+#
+# Tier 2 — Continuous penalty (sensitivity < HARD_BUDGET_THRESHOLD):
+#   Quadratic penalty that scales with overage and sensitivity.
+#   Products slightly over budget survive as visible "stretch options."
+#   Used when user says "around ₹X" or "roughly ₹X."
+#
+# The threshold and stretch ceiling are explicit constants — inspectable and tunable.
 # ═══════════════════════════════════════════════
+
+# At or above this sensitivity value, hard-tier enforcement activates.
+# Gemini assigns ~0.95 for "under X", "strict", "cannot exceed" language.
+HARD_BUDGET_THRESHOLD = 0.88
+
+# Even in hard mode, products up to this % over budget survive (at steep penalty).
+# Beyond this they score 0. Models the real-world "I said ₹70k but might do ₹73k."
+HARD_MODE_STRETCH_CEILING = 0.06   # 6% over budget maximum in hard mode
+
+# In soft mode, how steeply does penalty grow with overage?
+# Higher = steeper cliff. Current value: 30% over budget → ~full penalty at sensitivity=0.75
+SOFT_MODE_QUADRATIC_SCALE = 8.0
+
 
 def budget_penalty(
     price: float,
@@ -157,14 +421,24 @@ def budget_penalty(
 ) -> Tuple[float, float]:
     """
     Returns (penalty: float, overage_pct: float).
-    
-    penalty = λ · sensitivity · (overage_fraction)²
-    
-    This produces natural "stretch options" — slightly over budget survive
-    with a moderate penalty but remain discoverable.
-    
-    sensitivity: user's budget_sensitivity from PreferenceModel (0=flexible, 1=hard)
-    lambda_scale: profile-level scaling factor
+
+    Two-tier model:
+
+    HARD TIER (sensitivity >= 0.88 — user said "under X", "strict", "max X"):
+      - Within budget:                      penalty = 0.0
+      - 0–6% over budget (stretch zone):    penalty = sensitivity × (overage/ceiling)^1.5
+                                            steep but not disqualifying
+      - Beyond 6% over budget:              penalty = 1.0  (effectively eliminates from ranking)
+
+    SOFT TIER (sensitivity < 0.88 — user said "around X", "roughly X", or no qualifier):
+      - Within budget:                      penalty = 0.0
+      - Over budget:                        penalty = scale × sensitivity × overage²
+                                            moderate, products remain discoverable
+
+    Why not a literal hard filter (remove from results entirely)?
+      Products eliminated silently create a confusing UX — the user sees fewer results
+      with no explanation. A penalty of 1.0 keeps the product in the artifact trail
+      and lets the explainability layer say "excluded: 18% over your strict budget."
     """
     if price <= budget:
         return 0.0, 0.0
@@ -172,11 +446,20 @@ def budget_penalty(
     overage_fraction = (price - budget) / budget
     overage_pct = round(overage_fraction * 100, 2)
 
-    # Quadratic penalty scaled by sensitivity and profile lambda
-    penalty = lambda_scale * sensitivity * (overage_fraction ** 2)
-    penalty = min(penalty, 1.0)  # cap at 1.0
+    if sensitivity >= HARD_BUDGET_THRESHOLD:
+        # Hard tier
+        if overage_fraction > HARD_MODE_STRETCH_CEILING:
+            # Beyond stretch ceiling — effectively eliminated
+            return 1.0, overage_pct
+        # Inside stretch zone: steep convex penalty
+        stretch_progress = overage_fraction / HARD_MODE_STRETCH_CEILING
+        penalty = sensitivity * (stretch_progress ** 1.5)
+        return round(min(penalty, 0.98), 6), overage_pct
 
-    return round(penalty, 6), overage_pct
+    else:
+        # Soft tier: quadratic penalty
+        penalty = lambda_scale * SOFT_MODE_QUADRATIC_SCALE * sensitivity * (overage_fraction ** 2)
+        return round(min(penalty, 1.0), 6), overage_pct
 
 
 # ═══════════════════════════════════════════════
@@ -270,13 +553,14 @@ def compute_utility(
     if "max_weight_kg" in hard and hard["max_weight_kg"] is not None:
         raw_weight = normalized.raw_factors.get("portability")
         if raw_weight is not None:
-            lo, hi = profile.factor_ranges.get("portability", (0.0, 10.0))
-            # portability is inverse of weight; higher = lighter
-            # raw catalog portability score → approximate weight
-            # This is domain-specific but keeps the model honest
             violations.append("Weight constraint check: verify against catalog weight spec")
 
-    if b_penalty > 0.3:
+    if b_penalty >= 1.0:
+        violations.append(
+            f"Excluded: {overage_pct:.1f}% over strict budget ceiling "
+            f"(>{HARD_MODE_STRETCH_CEILING*100:.0f}% stretch limit)"
+        )
+    elif b_penalty > 0.3:
         violations.append(f"Significantly over budget (+{overage_pct:.1f}%)")
 
     if not within_budget:
@@ -826,6 +1110,22 @@ def run_optimization(
     pipeline_stages = []
     warnings = []
 
+    # ── 2a-PRE. Hard Categorical Constraint Enforcement ──
+    # Runs before everything else. Disqualified products get multiplier=0.0
+    # and cannot rank first regardless of their utility score.
+    constraint_multipliers, all_constraint_results = apply_hard_constraints(products, preference)
+    pipeline_stages.append("2a_pre_hard_constraints")
+
+    disqualified_count = sum(1 for m in constraint_multipliers.values() if m == 0.0)
+    if disqualified_count > 0:
+        warnings.append(
+            f"{disqualified_count} product(s) disqualified by hard categorical constraints "
+            f"({', '.join(c.field for c in preference.categorical_constraints)})."
+        )
+
+    # Flatten all constraint results for debug artifact
+    flat_constraint_results = [r for results in all_constraint_results.values() for r in results]
+
     # ── 2a. Normalization ──
     normalized_products = normalize_products(products, profile)
     pipeline_stages.append("2a_normalization")
@@ -889,31 +1189,47 @@ def run_optimization(
         r = regret_map.get(pid)
         pa = pareto_map.get(pid)
 
+        # ── Apply categorical constraint multiplier ──
+        c_multiplier = constraint_multipliers.get(pid, 1.0)
+        constrained_score = round(hybrid_score * c_multiplier, 6)
+        is_disqualified = c_multiplier == 0.0
+
+        # Constraint result details for this product
+        product_constraint_results = all_constraint_results.get(pid, [])
+        constraint_violations = [r_.reason for r_ in product_constraint_results if not r_.passed]
+        constraint_penalty_multiplier = c_multiplier
+
         data_flag = None
         if np_.data_completeness < profile.low_data_completeness_threshold:
             data_flag = f"Limited data ({np_.data_completeness:.0%} complete)"
+        if is_disqualified:
+            data_flag = (data_flag or "") + " | Disqualified: does not meet hard requirements"
 
         ranked_products_unsorted.append(RankedProduct(
             product_id=pid,
             name=u.name,
             price=np_.price,
-            rank=0,  # assigned below after sort
-            image=None,  # populated from catalog in main.py
+            rank=0,
+            image=None,
             url=None,
             utility_score=u.final_utility,
             topsis_closeness=t.topsis_closeness if t else 0.0,
             regret_score=r.regret_score if r else 1.0,
-            final_rank_score=hybrid_score,
-            ranking_confidence=0.0,  # populated below
-            is_statistically_equivalent=False,  # populated below
+            final_rank_score=constrained_score,
+            ranking_confidence=0.0,
+            is_statistically_equivalent=False,
             equivalence_group=None,
+            hard_constraint_results=product_constraint_results,
+            hard_constraint_violations=constraint_violations,
+            is_disqualified=is_disqualified,
+            constraint_penalty_multiplier=constraint_penalty_multiplier,
             is_pareto_optimal=pa.is_pareto_optimal if pa else False,
             pareto_frontier_rank=pa.pareto_frontier_rank if pa else None,
             positive_contributors=u.positive_contributors,
             penalty_contributors=u.penalty_contributors,
             interactions_fired=u.interactions_fired,
-            constraint_violations=u.constraint_violations,
-            sensitivity_suggestions=[],  # populated per-product below
+            constraint_violations=u.constraint_violations + constraint_violations,
+            sensitivity_suggestions=[],
             data_completeness=np_.data_completeness,
             data_quality_flag=data_flag,
             normalized_factors=adjusted_factors_map[pid],
@@ -973,6 +1289,7 @@ def run_optimization(
         debug_artifact = PipelineDebugArtifact(
             request_id=request_id,
             preference_model=preference,
+            hard_constraint_results=flat_constraint_results,
             normalized_products=normalized_products,
             utility_artifacts=utility_artifacts,
             pareto_artifacts=pareto_artifacts,

@@ -30,6 +30,56 @@ class AnalysisRequest(BaseModel):
 # (Gemini NLP → this. Math engine consumes this.)
 # ─────────────────────────────────────────────
 
+class HardConstraint(BaseModel):
+    """
+    A single non-negotiable constraint on a categorical or numeric product attribute.
+
+    match_type controls how the constraint is enforced:
+
+      "exact"    — product[field] must equal value (case-insensitive string match)
+                   Example: os="Windows", chip_brand="Apple"
+                   Violation → score multiplied by violation_penalty (default 0.0)
+
+      "one_of"   — product[field] must be in values list
+                   Example: chip_series in ["M3", "M3 Pro", "M3 Max"]
+                   Violation → score multiplied by violation_penalty
+
+      "minimum"  — product[field] must be >= value (numeric)
+                   Example: ram_gb >= 16, storage_gb >= 512
+                   Violation → proportional penalty: (actual/required)^2
+
+      "maximum"  — product[field] must be <= value (numeric)
+                   Example: weight_kg <= 1.5
+                   Violation → proportional penalty: (required/actual)^2
+
+      "excludes" — product[field] must NOT equal value (or not be in values)
+                   Example: chip_brand != "Qualcomm", os != "ChromeOS"
+                   Violation → score multiplied by violation_penalty
+
+    Fields:
+      field            — the product catalog key to check (e.g. "chip_brand", "os", "ram_gb")
+      value            — single value for exact/minimum/maximum/excludes
+      values           — list of values for one_of/excludes (when excluding multiple)
+      match_type       — enforcement type (see above)
+      violation_penalty — multiplier applied to final_rank_score on violation
+                          0.0 = complete disqualification (default for categorical)
+                          0.1 = heavy penalty but still shows in results with warning
+      source           — where this constraint came from: "explicit" | "inferred"
+                          explicit = user said it directly ("only Intel", "must be M3")
+                          inferred = derived from context ("for MacOS workflow" → chip_brand=Apple)
+    """
+    field: str = Field(description="Product catalog key to check")
+    value: Optional[Any] = Field(default=None, description="Single value (exact/minimum/maximum/excludes)")
+    values: Optional[List[Any]] = Field(default=None, description="List of values (one_of/excludes multi)")
+    match_type: str = Field(description="exact | one_of | minimum | maximum | excludes")
+    violation_penalty: float = Field(
+        default=0.0,
+        ge=0.0, le=1.0,
+        description="Score multiplier on violation. 0.0=disqualified, 0.1=heavy penalty."
+    )
+    source: str = Field(default="explicit", description="explicit | inferred")
+
+
 class PreferenceModel(BaseModel):
     """
     Structured intent extracted from raw user language.
@@ -38,7 +88,16 @@ class PreferenceModel(BaseModel):
     """
     hard_constraints: Dict[str, Any] = Field(
         default_factory=dict,
-        description="Non-negotiable filters: budget ceiling, max weight, OS requirement, etc."
+        description="Numeric hard constraints: budget, max_weight_kg, min_ram_gb, etc."
+    )
+    categorical_constraints: List[HardConstraint] = Field(
+        default_factory=list,
+        description=(
+            "Non-negotiable categorical and typed constraints. "
+            "Each is evaluated before scoring begins. "
+            "Violations result in disqualification or heavy penalty. "
+            "Examples: chip_brand=Apple, os=Windows, chip_series in [M3,M3 Pro], ram_gb>=16"
+        )
     )
     soft_constraints: Dict[str, float] = Field(
         default_factory=dict,
@@ -92,6 +151,23 @@ class NormalizedProduct(BaseModel):
     curve_applied: Dict[str, str] = Field(description="Which curve was used per factor: linear|log|sigmoid|diminishing")
     data_completeness: float = Field(ge=0.0, le=1.0, description="Fraction of expected factors present")
     missing_factors: List[str] = Field(default_factory=list)
+
+
+class HardConstraintResult(BaseModel):
+    """
+    Result of evaluating a single HardConstraint against a single product.
+    Preserved in the pipeline debug artifact for full inspectability.
+    """
+    product_id: str
+    constraint_field: str
+    match_type: str
+    required: Any = Field(description="What was required (value or values)")
+    actual: Any = Field(description="What the product had (None if field missing)")
+    passed: bool
+    penalty_applied: float = Field(description="Score multiplier applied. 1.0 = no penalty.")
+    disqualified: bool = Field(description="True when penalty_applied == 0.0")
+    source: str = Field(description="explicit | inferred")
+    reason: str = Field(description="Human-readable explanation of what happened")
 
 
 class InteractionEvent(BaseModel):
@@ -246,6 +322,25 @@ class RankedProduct(BaseModel):
         description="Products in the same equivalence group are effectively identical"
     )
 
+    # ── Constraint enforcement results ──
+    hard_constraint_results: List[HardConstraintResult] = Field(
+        default_factory=list,
+        description="Evaluation result for every categorical constraint against this product"
+    )
+    hard_constraint_violations: List[str] = Field(
+        default_factory=list,
+        description="Human-readable list of constraint violations for this product"
+    )
+    is_disqualified: bool = Field(
+        default=False,
+        description="True if any categorical constraint fully disqualified this product"
+    )
+    constraint_penalty_multiplier: float = Field(
+        default=1.0,
+        ge=0.0, le=1.0,
+        description="Combined multiplier from all categorical constraint violations. 1.0=no violations."
+    )
+
     # ── Pareto status ──
     is_pareto_optimal: bool
     pareto_frontier_rank: Optional[int] = None
@@ -295,6 +390,10 @@ class PipelineDebugArtifact(BaseModel):
     """
     request_id: str
     preference_model: PreferenceModel
+    hard_constraint_results: List[HardConstraintResult] = Field(
+        default_factory=list,
+        description="Every constraint evaluation result across all products"
+    )
     normalized_products: List[NormalizedProduct]
     utility_artifacts: List[UtilityArtifact]
     pareto_artifacts: List[ParetoArtifact]

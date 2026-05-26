@@ -78,6 +78,16 @@ The JSON must have exactly this structure:
     "budget": {budget},
     "max_weight_kg": null
   }},
+  "categorical_constraints": [
+    {{
+      "field": "chip_brand",
+      "value": "Apple",
+      "values": null,
+      "match_type": "exact",
+      "violation_penalty": 0.0,
+      "source": "explicit"
+    }}
+  ],
   "soft_constraints": {{
     "factor_name": 0.0_to_1.0_importance
   }},
@@ -92,18 +102,68 @@ The JSON must have exactly this structure:
   "inference_notes": "brief explanation of what you inferred and why"
 }}
 
-─── RULES ───
+─── CATEGORICAL CONSTRAINT RULES ───
+Categorical constraints are NON-NEGOTIABLE requirements on specific product attributes.
+They are checked before any scoring. Violations disqualify the product entirely.
+
+Extract a categorical constraint whenever the user:
+  - Names a chip, brand, or platform explicitly ("only Apple", "must be Intel", "M3 chip")
+  - Names an OS ("Windows only", "needs MacOS", "no ChromeOS")
+  - States a minimum spec ("at least 16GB RAM", "minimum 512GB storage", "RTX 4060 or better")
+  - States a maximum physical attribute ("under 1.5kg", "must fit in a bag")
+  - Excludes something ("no AMD", "not Qualcomm", "avoid gaming laptops")
+
+Field names to use (match your catalog schema):
+  chip_brand     — "Apple" | "Intel" | "AMD" | "Qualcomm" | "MediaTek"
+  chip_series    — "M3" | "M3 Pro" | "Snapdragon X Elite" | "Core Ultra 7" etc.
+  os             — "Windows" | "macOS" | "ChromeOS" | "Linux"
+  ram_gb         — numeric, use match_type "minimum"
+  storage_gb     — numeric, use match_type "minimum"
+  weight_kg      — numeric, use match_type "maximum"
+  gpu_brand      — "NVIDIA" | "AMD" | "Intel" | "Apple"
+  gpu_model      — specific model e.g. "RTX 4060"
+
+match_type rules:
+  "exact"    — field must equal value exactly (case-insensitive). Use for brand/OS/chip.
+  "one_of"   — field must be in values list. Use when user names multiple acceptable options.
+  "minimum"  — field >= value (numeric). Use for RAM, storage, RAM.
+  "maximum"  — field <= value (numeric). Use for weight, price (budget handled separately).
+  "excludes" — field must NOT equal value. Use for "no AMD", "not Windows".
+
+violation_penalty:
+  0.0 — complete disqualification. Use when user says "only", "must", "need", "require", "no X".
+  0.1 — heavy penalty but survives. Use when user says "prefer", "ideally", "if possible".
+
+source:
+  "explicit" — user stated this directly in clear language.
+  "inferred" — derived from context (e.g. "for Final Cut Pro workflow" → chip_brand=Apple, os=macOS).
+
+If no categorical constraints exist, set "categorical_constraints": [].
+Do NOT invent constraints the user did not state or strongly imply.
+
+─── NUMERIC HARD CONSTRAINTS ───
+hard_constraints handles budget and numeric physical limits:
+  budget        — always set from the input budget value
+  max_weight_kg — only if user stated a weight requirement (else null)
+  min_ram_gb    — only if user stated RAM requirement (numeric min)
+  min_storage_gb — only if user stated storage requirement
+
+─── OTHER RULES ───
 1. inferred_weights MUST cover all relevant factors from the available list.
    Include ALL factors — even low-priority ones get a small non-zero weight.
    Weights do NOT need to sum to 1.0 — the engine normalizes them.
 2. Do NOT assign equal weights to everything. Differentiate clearly.
-3. hard_constraints: only things the user CANNOT compromise on.
-4. soft_constraints: things the user wants but could trade.
-5. tradeoff_tolerance: 0 = wants perfect match, 1 = accepts heavy compromise.
-6. budget_sensitivity: 0 = budget is flexible, 1 = hard ceiling.
-7. inference_confidence: 1.0 = user was very clear, 0.0 = highly ambiguous input.
-8. use_case_tags: from [student, gaming, creator, travel, professional, general].
-9. inference_notes: 1–2 sentences explaining your reasoning.
+3. soft_constraints: things the user wants but could trade.
+4. tradeoff_tolerance: 0 = wants perfect match, 1 = accepts heavy compromise.
+5. budget_sensitivity rules:
+   - "under ₹X", "max ₹X", "strict", "cannot exceed", "hard limit" → 0.95
+   - "around ₹X", "roughly", "approximately" → 0.65
+   - "flexible", "willing to stretch", "if needed" → 0.30
+   - No qualifier → 0.75 (default firm)
+6. inference_confidence: 1.0 = user was very clear, 0.0 = highly ambiguous.
+7. use_case_tags: from [student, gaming, creator, travel, professional, general].
+8. inference_notes: explain what categorical constraints you extracted and why,
+   and what budget_sensitivity you set and why.
 """
 
 
@@ -222,7 +282,6 @@ def infer_preferences(
         if weights:
             raw_data["inferred_weights"] = _normalize_weights(weights)
         else:
-            # If Gemini omitted weights, build equal fallback
             factors = profile.expected_factors
             raw_data["inferred_weights"] = {f: 1.0 / len(factors) for f in factors}
             raw_data["inference_confidence"] = min(
@@ -234,11 +293,30 @@ def infer_preferences(
             raw_data["hard_constraints"] = {}
         raw_data["hard_constraints"]["budget"] = budget
 
+        # Ensure categorical_constraints is always a list (Gemini may omit it)
+        if "categorical_constraints" not in raw_data:
+            raw_data["categorical_constraints"] = []
+
+        # Validate each categorical constraint has required fields; drop malformed ones
+        valid_constraints = []
+        for c in raw_data["categorical_constraints"]:
+            if not isinstance(c, dict):
+                continue
+            if "field" not in c or "match_type" not in c:
+                continue
+            # Ensure at least value or values is present
+            if c.get("value") is None and not c.get("values"):
+                continue
+            # Default violation_penalty to 0.0 (disqualify) if missing
+            c.setdefault("violation_penalty", 0.0)
+            c.setdefault("source", "explicit")
+            valid_constraints.append(c)
+        raw_data["categorical_constraints"] = valid_constraints
+
         preference_model = PreferenceModel(**raw_data)
         return preference_model
 
     except Exception as e:
-        # Pydantic validation failed — Gemini returned structurally wrong data
         fallback = _fallback_preference_model(profile, budget)
         fallback.inference_notes = (
             f"Preference model validation failed ({str(e)[:120]}). Using fallback."
